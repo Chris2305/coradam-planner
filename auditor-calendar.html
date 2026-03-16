@@ -1,0 +1,1390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Auditor Calendar</title>
+  <style>
+    :root{
+      --p:#1d4ed8;--pd:#1e3a8a;--pl:#3b82f6;
+      --bg:#f1f5f9;--card:#fff;--bdr:#e2e8f0;
+      --tx:#1e293b;--txs:#64748b;
+      --full:#3b82f6;--am:#10b981;--pm:#f59e0b;
+      --danger:#ef4444;
+      --r:8px;
+      --sh:0 1px 3px rgba(0,0,0,.1),0 1px 2px rgba(0,0,0,.06);
+      --shm:0 4px 6px -1px rgba(0,0,0,.1),0 2px 4px -2px rgba(0,0,0,.06);
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--tx);min-height:100vh}
+    .screen{display:none}
+    .screen.active{display:block;animation:fi .18s ease}
+    @keyframes fi{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+
+    /* ── Header ── */
+    .hdr{background:var(--p);color:#fff;padding:0 1.25rem;height:54px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:var(--shm)}
+    .hdr-l{font-size:.98rem;font-weight:700;display:flex;align-items:center;gap:.4rem}
+    .hdr-r{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap}
+    .hdr-u{font-size:.78rem;opacity:.75;margin-right:.2rem}
+
+    /* ── Buttons ── */
+    .btn{padding:.42rem .85rem;border-radius:var(--r);border:none;cursor:pointer;font-size:.8rem;font-weight:600;transition:all .14s;display:inline-flex;align-items:center;gap:.32rem;white-space:nowrap;line-height:1}
+    .btn-p{background:var(--p);color:#fff}.btn-p:hover{background:var(--pd)}
+    .btn-s{background:#fff;color:var(--tx);border:1.5px solid var(--bdr)}.btn-s:hover{background:var(--bg)}
+    .btn-g{background:transparent;color:#fff;opacity:.82}.btn-g:hover{opacity:1;background:rgba(255,255,255,.13)}
+    .btn-d{background:var(--danger);color:#fff}.btn-d:hover{background:#dc2626}
+    .btn-sm{padding:.28rem .6rem;font-size:.75rem}
+    .btn-blk{width:100%;justify-content:center;padding:.68rem}
+
+    /* ── Forms ── */
+    .fg{margin-bottom:1rem}
+    .lbl{display:block;font-size:.8rem;font-weight:600;margin-bottom:.32rem;color:var(--tx)}
+    .lbl-opt{font-weight:400;color:var(--txs);font-size:.75rem}
+    .inp,.sel{width:100%;padding:.54rem .78rem;border:1.5px solid var(--bdr);border-radius:var(--r);font-size:.875rem;color:var(--tx);background:#fff;outline:none;transition:border-color .14s}
+    .inp:focus,.sel:focus{border-color:var(--p);box-shadow:0 0 0 3px rgba(29,78,216,.1)}
+    .inp-pin{letter-spacing:.4em;text-align:center;font-size:1.1rem}
+    .ta{resize:vertical;min-height:72px}
+    .inp-num{-moz-appearance:textfield}.inp-num::-webkit-inner-spin-button{opacity:1}
+    .err-msg{display:none;color:var(--danger);font-size:.76rem;margin-top:-.5rem;margin-bottom:.6rem;line-height:1.55}
+    .err-msg code{background:#fee2e2;border-color:#fca5a5;color:#991b1b}
+
+    /* ── Inline 2-col ── */
+    .row2{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
+
+    /* ── Login ── */
+    .login-bg{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem;background:linear-gradient(135deg,#1e3a8a 0%,#1d4ed8 55%,#2563eb 100%)}
+    .login-card{background:#fff;border-radius:14px;padding:2.2rem;width:100%;max-width:370px;box-shadow:0 24px 64px rgba(0,0,0,.28)}
+    .login-ico{text-align:center;font-size:2.1rem;margin-bottom:.5rem}
+    .login-h{text-align:center;font-size:1.35rem;font-weight:800;margin-bottom:.2rem}
+    .login-sub{text-align:center;font-size:.8rem;color:var(--txs);margin-bottom:1.65rem}
+
+    /* ── Slot type toggle ── */
+    .slot-btns{display:flex;gap:.45rem}
+    .slt-btn{flex:1;padding:.52rem;border:2px solid var(--bdr);border-radius:var(--r);background:#fff;cursor:pointer;font-size:.76rem;font-weight:700;text-align:center;transition:all .14s;color:var(--txs)}
+    .slt-btn.on-full{border-color:var(--full);background:#eff6ff;color:var(--full)}
+    .slt-btn.on-am{border-color:var(--am);background:#ecfdf5;color:#065f46}
+    .slt-btn.on-pm{border-color:var(--pm);background:#fffbeb;color:#92400e}
+
+    /* ── Calendar ── */
+    .cal-wrap{padding:1rem 1.2rem;max-width:860px;margin:0 auto}
+    .cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:.9rem;gap:.5rem}
+    .cal-lbl{font-size:1.12rem;font-weight:800;text-align:center}
+    .legend{display:flex;gap:.8rem;flex-wrap:wrap;margin-top:.28rem;justify-content:center}
+    .leg-i{display:flex;align-items:center;gap:.28rem;font-size:.7rem;color:var(--txs)}
+    .leg-d{width:10px;height:10px;border-radius:2px}
+    .ld-f{background:var(--full)}.ld-a{background:var(--am)}.ld-p{background:var(--pm)}
+
+    .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+    .cal-hdr{text-align:center;font-size:.68rem;font-weight:800;color:var(--txs);padding:.38rem 0;text-transform:uppercase;letter-spacing:.04em}
+    .cal-day{min-height:78px;border:1px solid var(--bdr);border-radius:6px;background:#fff;padding:.32rem;cursor:pointer;transition:border-color .13s,box-shadow .13s}
+    .cal-day:hover{border-color:var(--pl);box-shadow:0 0 0 2px rgba(59,130,246,.14)}
+    .cal-day.td{border-color:var(--p);background:#eff6ff}
+    .cal-day.oth{opacity:.28;cursor:default;background:#f8fafc}
+    .cal-day.oth:hover{border-color:var(--bdr);box-shadow:none}
+    .dn{font-size:.73rem;font-weight:700;color:var(--txs);margin-bottom:.18rem}
+    .td .dn{color:var(--p)}
+    .dslots{display:flex;flex-direction:column;gap:2px}
+    .chip{border-radius:3px;padding:1px 4px;font-size:.65rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+    .c-full{background:#dbeafe;color:#1d4ed8}
+    .c-am{background:#d1fae5;color:#065f46}
+    .c-pm{background:#fef3c7;color:#92400e}
+
+    /* ── Admin ── */
+    .adm-wrap{padding:1rem 1.2rem;max-width:1440px;margin:0 auto}
+    .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:.6rem;margin-bottom:.9rem}
+    .stat{background:#fff;border:1px solid var(--bdr);border-radius:var(--r);padding:.8rem;box-shadow:var(--sh);text-align:center}
+    .sv{font-size:1.55rem;font-weight:800;color:var(--p)}
+    .sl{font-size:.68rem;color:var(--txs);font-weight:600;margin-top:.1rem}
+
+    .fbar{display:flex;gap:.6rem;flex-wrap:wrap;align-items:flex-end;background:#fff;border:1px solid var(--bdr);border-radius:var(--r);padding:.8rem;margin-bottom:.9rem;box-shadow:var(--sh)}
+    .fg-f{display:flex;flex-direction:column;gap:.22rem;min-width:115px}
+    .flbl{font-size:.65rem;font-weight:800;color:var(--txs);text-transform:uppercase;letter-spacing:.05em}
+    .fsel{padding:.32rem .52rem;border:1.5px solid var(--bdr);border-radius:var(--r);font-size:.8rem;color:var(--tx);background:#fff;outline:none;cursor:pointer}
+    .fsel:focus{border-color:var(--p)}
+
+    /* Nav tabs */
+    .ntabs{display:flex;background:rgba(255,255,255,.13);border-radius:6px;padding:2px}
+    .ntab{padding:.26rem .75rem;border-radius:5px;font-size:.76rem;font-weight:700;cursor:pointer;color:rgba(255,255,255,.68);transition:all .14s}
+    .ntab.on{background:#fff;color:var(--p)}
+
+    /* Timeline */
+    .tl-scroll{overflow-x:auto;border:1px solid var(--bdr);border-radius:var(--r);background:#fff;box-shadow:var(--sh)}
+    .tl{min-width:800px;border-collapse:collapse;width:100%}
+    .tl th{background:#f8fafc;padding:.38rem .45rem;font-size:.65rem;font-weight:800;color:var(--txs);text-transform:uppercase;border-bottom:2px solid var(--bdr);white-space:nowrap;position:sticky;top:0;z-index:1}
+    .tl th:first-child{width:155px;position:sticky;left:0;z-index:2;border-right:2px solid var(--bdr)}
+    .tl td:first-child{position:sticky;left:0;background:#fff;z-index:1;border-right:2px solid var(--bdr)}
+    .tl tr:hover td{background:#f8fafc}.tl tr:hover td:first-child{background:#f8fafc}
+    .tl td{padding:.28rem .32rem;border-bottom:1px solid var(--bdr);border-right:1px solid var(--bdr);font-size:.78rem;vertical-align:middle;min-width:36px}
+    .tl-un{font-weight:700;font-size:.78rem;white-space:nowrap}
+    .tl-co{font-size:.64rem;color:var(--txs)}
+    .tl-cell{display:flex;flex-direction:column;gap:1px;align-items:center;min-height:34px;justify-content:center;padding:1px}
+    .tl-dot{width:28px;height:12px;border-radius:3px;cursor:pointer}
+    .d-f{background:var(--full)}.d-a{background:var(--am)}.d-p{background:var(--pm)}
+    .tc-td{background:#eff6ff!important}
+    .tl th.tc-td{color:var(--p)}
+
+    /* List */
+    .ltab{width:100%;border-collapse:collapse;background:#fff;border-radius:var(--r);overflow:hidden;box-shadow:var(--sh)}
+    .ltab th{background:#f8fafc;padding:.6rem .85rem;text-align:left;font-size:.68rem;font-weight:800;color:var(--txs);text-transform:uppercase;border-bottom:1px solid var(--bdr)}
+    .ltab td{padding:.52rem .85rem;font-size:.8rem;border-bottom:1px solid var(--bdr);vertical-align:middle}
+    .ltab tr:last-child td{border-bottom:none}
+    .ltab tr:hover td{background:#f8fafc}
+
+    /* Badges */
+    .badge{display:inline-flex;align-items:center;padding:.16rem .52rem;border-radius:999px;font-size:.68rem;font-weight:700}
+    .b-f{background:#dbeafe;color:#1d4ed8}
+    .b-a{background:#d1fae5;color:#065f46}
+    .b-p{background:#fef3c7;color:#92400e}
+    .b-adm{background:#fce7f3;color:#9d174d}
+    .b-aud{background:#e0f2fe;color:#0369a1}
+    .b-on{background:#dcfce7;color:#166534}
+    .b-off{background:#fee2e2;color:#991b1b}
+
+    /* Modal */
+    .mov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.48);z-index:1000;align-items:center;justify-content:center;padding:1rem}
+    .mov.open{display:flex}
+    .modal{background:#fff;border-radius:12px;padding:1.55rem;width:100%;max-width:460px;max-height:93vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.28);animation:fi .17s ease}
+    .modal-lg{max-width:580px}
+    .mtitle{font-size:1rem;font-weight:800;margin-bottom:1.1rem}
+    .mfoot{display:flex;gap:.6rem;justify-content:flex-end;margin-top:1.3rem;flex-wrap:wrap}
+    .ml{margin-right:auto}
+
+    /* Settings */
+    .set-wrap{padding:1rem 1.2rem;max-width:900px;margin:0 auto}
+    .set-card{background:#fff;border-radius:var(--r);border:1px solid var(--bdr);margin-bottom:1.2rem;box-shadow:var(--sh);overflow:hidden}
+    .set-head{padding:.82rem 1.1rem;border-bottom:1px solid var(--bdr);font-weight:800;font-size:.9rem;display:flex;justify-content:space-between;align-items:center}
+    .stabs{display:flex;border-bottom:2px solid var(--bdr);background:#fff}
+    .stab{padding:.6rem 1.2rem;font-size:.82rem;font-weight:700;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;color:var(--txs);transition:all .13s}
+    .stab.on{color:var(--p);border-bottom-color:var(--p)}
+    .gtab{display:none}.gtab.on{display:block}
+
+    /* Tables inside settings */
+    .utab{width:100%;border-collapse:collapse}
+    .utab th{background:#f8fafc;padding:.52rem .9rem;text-align:left;font-size:.68rem;font-weight:800;color:var(--txs);text-transform:uppercase;border-bottom:1px solid var(--bdr)}
+    .utab td{padding:.52rem .9rem;font-size:.8rem;border-bottom:1px solid var(--bdr);vertical-align:middle}
+    .utab tr:last-child td{border-bottom:none}
+
+    /* Spinner overlay */
+    .spin-ov{display:none;position:fixed;inset:0;background:rgba(255,255,255,.7);z-index:2000;align-items:center;justify-content:center}
+    .spin-ov.on{display:flex}
+    .spinner{width:40px;height:40px;border:4px solid var(--bdr);border-top-color:var(--p);border-radius:50%;animation:spin .7s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* Toast */
+    .toast{position:fixed;bottom:1.2rem;left:50%;transform:translateX(-50%) translateY(80px);background:#1e293b;color:#fff;padding:.6rem 1.1rem;border-radius:8px;font-size:.82rem;font-weight:600;z-index:3000;transition:transform .28s ease;pointer-events:none;white-space:nowrap}
+    .toast.show{transform:translateX(-50%) translateY(0)}
+    .toast.ok{background:#065f46}
+    .toast.bad{background:#991b1b}
+
+    /* Setup screen */
+    .setup-bg{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem;background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 60%,#1d4ed8 100%)}
+    .setup-card{background:#fff;border-radius:16px;padding:2.4rem;width:100%;max-width:500px;box-shadow:0 28px 70px rgba(0,0,0,.35)}
+    .setup-h{font-size:1.5rem;font-weight:800;margin-bottom:.3rem}
+    .setup-sub{font-size:.83rem;color:var(--txs);margin-bottom:1.8rem;line-height:1.55}
+    .step{display:flex;gap:.8rem;margin-bottom:.7rem;font-size:.82rem;line-height:1.5}
+    .step-n{background:var(--p);color:#fff;border-radius:50%;width:22px;height:22px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:800;margin-top:.1rem}
+    code{background:#f1f5f9;border:1px solid var(--bdr);border-radius:4px;padding:1px 5px;font-size:.8rem;font-family:monospace}
+
+    /* Checkbox list */
+    .chk-list{max-height:180px;overflow-y:auto;border:1.5px solid var(--bdr);border-radius:var(--r);padding:.4rem}
+    .chk-item{display:flex;align-items:center;gap:.5rem;padding:.3rem .4rem;border-radius:4px;cursor:pointer;font-size:.83rem}
+    .chk-item:hover{background:#f8fafc}
+    .chk-item input{cursor:pointer;width:15px;height:15px}
+
+    /* Qty display */
+    .qty-tag{font-size:.7rem;color:var(--txs);font-style:italic}
+
+    /* Responsive */
+    @media(max-width:600px){
+      .cal-day{min-height:60px;padding:.25rem}
+      .cal-wrap,.adm-wrap{padding:.65rem}
+      .row2{grid-template-columns:1fr}
+      .fbar{flex-direction:column}
+      .fg-f{min-width:100%}
+      .hdr-u{display:none}
+    }
+    .empty{text-align:center;padding:2.5rem 1rem;color:var(--txs)}
+    .empty-ic{font-size:2.4rem;margin-bottom:.55rem}
+    .empty-t{font-size:.92rem;font-weight:700;margin-bottom:.2rem}
+    .empty-s{font-size:.8rem}
+  </style>
+</head>
+<body>
+
+<!-- ════════ SPINNER ════════ -->
+<div class="spin-ov" id="spin"><div class="spinner"></div></div>
+<div class="toast" id="toast"></div>
+
+<!-- ════════════════════════════════════
+     SETUP SCREEN
+════════════════════════════════════ -->
+<div id="s-setup" class="screen active">
+  <div class="setup-bg">
+    <div class="setup-card">
+      <div style="font-size:2rem;margin-bottom:.5rem">📋</div>
+      <div class="setup-h">Auditor Calendar</div>
+      <p class="setup-sub">First-time setup: connect to a free Firebase database so all your team's data syncs in real time — no imports needed.</p>
+
+      <div style="background:#f8fafc;border:1px solid var(--bdr);border-radius:var(--r);padding:1rem;margin-bottom:1.2rem">
+        <p style="font-size:.8rem;font-weight:800;margin-bottom:.6rem;color:var(--tx)">Quick setup (5 minutes, free)</p>
+        <div class="step"><div class="step-n">1</div><div>Go to <strong>console.firebase.google.com</strong> → <em>Add project</em></div></div>
+        <div class="step"><div class="step-n">2</div><div>In your project: <strong>Build → Realtime Database → Create database</strong> — choose your region</div></div>
+        <div class="step"><div class="step-n">3</div><div>⚠️ <strong>Important — open the Rules tab</strong> and replace the contents with:<br>
+          <code style="display:block;margin-top:.3rem;padding:.4rem .5rem;background:#1e293b;color:#86efac;border-radius:5px;font-size:.75rem;line-height:1.6;white-space:pre">{ "rules": { ".read": true, ".write": true } }</code>
+          Then click <strong>Publish</strong>.</div></div>
+        <div class="step"><div class="step-n">4</div><div>Back on the <strong>Data tab</strong>, copy your database URL. It looks like:<br><code>https://my-app-default-rtdb.europe-west1.firebasedatabase.app</code><br>You can also append a custom path like <code>/coradam-planner</code> to namespace your data.</div></div>
+        <div class="step"><div class="step-n">5</div><div>Paste the URL below and click <strong>Connect</strong></div></div>
+      </div>
+
+      <div style="background:#fefce8;border:1px solid #fde68a;border-radius:var(--r);padding:.7rem .9rem;margin-bottom:1rem;font-size:.78rem;color:#78350f;line-height:1.5">
+        <strong>Already have a database?</strong> The most common cause of connection errors is <strong>security rules set to "locked mode"</strong>. Go to Firebase Console → Realtime Database → <strong>Rules</strong> and make sure <code>.read</code> and <code>.write</code> are both <code>true</code>.
+      </div>
+
+      <div class="fg">
+        <label class="lbl">Firebase Realtime Database URL</label>
+        <input type="text" id="setup-url" class="inp" placeholder="https://your-project-default-rtdb.europe-west1.firebasedatabase.app" autocomplete="off" spellcheck="false">
+      </div>
+      <div id="setup-err" class="err-msg" style="display:block;margin-bottom:.8rem"></div>
+      <button class="btn btn-p btn-blk" onclick="Setup.connect()">Connect &amp; Get Started →</button>
+      <p style="text-align:center;margin-top:.8rem;font-size:.73rem;color:var(--txs)">Your data stays in your own Firebase project. Free tier supports teams up to ~20 active users.</p>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════
+     LOGIN SCREEN
+════════════════════════════════════ -->
+<div id="s-login" class="screen">
+  <div class="login-bg">
+    <div class="login-card">
+      <div class="login-ico">📋</div>
+      <h1 class="login-h">Auditor Calendar</h1>
+      <p class="login-sub">Sign in to access your calendar</p>
+      <div class="fg">
+        <label class="lbl">Your name</label>
+        <select id="ln-name" class="sel"><option value="">Select your name…</option></select>
+      </div>
+      <div class="fg">
+        <label class="lbl">PIN</label>
+        <input type="password" id="ln-pin" class="inp inp-pin" placeholder="••••" maxlength="6" autocomplete="off">
+      </div>
+      <div id="ln-err" class="err-msg"></div>
+      <button class="btn btn-p btn-blk" onclick="App.login()">Sign In →</button>
+      <p style="text-align:center;margin-top:.85rem;font-size:.72rem;color:var(--txs)">Contact your admin to get your account set up.<br><em>Default admin: "Admin" · PIN 0000</em></p>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════
+     CALENDAR SCREEN (Auditor)
+════════════════════════════════════ -->
+<div id="s-cal" class="screen">
+  <header class="hdr">
+    <div class="hdr-l">📋 <span id="hdr-cal"></span></div>
+    <div class="hdr-r">
+      <span class="hdr-u" id="hdr-cal-u"></span>
+      <button class="btn btn-g btn-sm" onclick="App.logout()">Sign out</button>
+    </div>
+  </header>
+  <div class="cal-wrap">
+    <div class="cal-nav">
+      <button class="btn btn-s btn-sm" onclick="Cal.prev()">← Prev</button>
+      <div style="text-align:center">
+        <div class="cal-lbl" id="cal-lbl"></div>
+        <div class="legend">
+          <div class="leg-i"><div class="leg-d ld-f"></div>Full Day</div>
+          <div class="leg-i"><div class="leg-d ld-a"></div>Half Day AM</div>
+          <div class="leg-i"><div class="leg-d ld-p"></div>Half Day PM</div>
+        </div>
+      </div>
+      <button class="btn btn-s btn-sm" onclick="Cal.next()">Next →</button>
+    </div>
+    <div class="cal-grid" id="cal-grid">
+      <div class="cal-hdr">Mon</div><div class="cal-hdr">Tue</div><div class="cal-hdr">Wed</div>
+      <div class="cal-hdr">Thu</div><div class="cal-hdr">Fri</div><div class="cal-hdr">Sat</div>
+      <div class="cal-hdr">Sun</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════
+     ADMIN DASHBOARD
+════════════════════════════════════ -->
+<div id="s-adm" class="screen">
+  <header class="hdr">
+    <div class="hdr-l">📊 Admin Dashboard</div>
+    <div class="hdr-r">
+      <div class="ntabs">
+        <div class="ntab on" id="nt-tl" onclick="Adm.setView('tl')">Timeline</div>
+        <div class="ntab" id="nt-ls" onclick="Adm.setView('ls')">List</div>
+      </div>
+      <button class="btn btn-g btn-sm" onclick="Adm.refresh()">↻ Refresh</button>
+      <button class="btn btn-g btn-sm" onclick="Adm.exportCSV()">⬆ CSV</button>
+      <button class="btn btn-g btn-sm" onclick="App.goSettings()">⚙ Settings</button>
+      <button class="btn btn-g btn-sm" onclick="App.logout()">Sign out</button>
+    </div>
+  </header>
+  <div class="adm-wrap">
+    <div class="stats-grid" id="adm-stats"></div>
+    <div class="fbar">
+      <div class="fg-f">
+        <span class="flbl">Month</span>
+        <input type="month" id="f-mo" class="fsel" onchange="Adm.applyFilters()">
+      </div>
+      <div class="fg-f">
+        <span class="flbl">Country</span>
+        <select id="f-co" class="fsel" onchange="Adm.applyFilters()"><option value="">All countries</option></select>
+      </div>
+      <div class="fg-f">
+        <span class="flbl">Auditor</span>
+        <select id="f-us" class="fsel" onchange="Adm.applyFilters()"><option value="">All auditors</option></select>
+      </div>
+      <div class="fg-f">
+        <span class="flbl">Client</span>
+        <select id="f-cl" class="fsel" onchange="Adm.applyFilters()"><option value="">All clients</option></select>
+      </div>
+      <div class="fg-f">
+        <span class="flbl">Factory</span>
+        <select id="f-fa" class="fsel" onchange="Adm.applyFilters()"><option value="">All factories</option></select>
+      </div>
+      <button class="btn btn-s btn-sm" style="align-self:flex-end" onclick="Adm.clearFilters()">✕ Clear</button>
+    </div>
+
+    <div id="vw-tl">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.7rem;flex-wrap:wrap;gap:.4rem">
+        <button class="btn btn-s btn-sm" onclick="Adm.prev()">← Prev</button>
+        <div class="cal-lbl" id="adm-lbl"></div>
+        <button class="btn btn-s btn-sm" onclick="Adm.next()">Next →</button>
+      </div>
+      <div class="tl-scroll"><table class="tl" id="tl-tbl"></table></div>
+    </div>
+    <div id="vw-ls" style="display:none"><div id="ls-content"></div></div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════
+     SETTINGS SCREEN
+════════════════════════════════════ -->
+<div id="s-set" class="screen">
+  <header class="hdr">
+    <div class="hdr-l">⚙ Settings</div>
+    <div class="hdr-r">
+      <button class="btn btn-g btn-sm" onclick="App.goAdmin()">← Dashboard</button>
+      <button class="btn btn-g btn-sm" onclick="App.logout()">Sign out</button>
+    </div>
+  </header>
+  <div class="set-wrap">
+    <div class="stabs">
+      <div class="stab on" onclick="Sett.tab('users')">👥 Users</div>
+      <div class="stab" onclick="Sett.tab('clients')">🏭 Clients</div>
+      <div class="stab" onclick="Sett.tab('data')">💾 Data</div>
+    </div>
+
+    <!-- Users tab -->
+    <div id="gt-users" class="gtab on" style="margin-top:1rem">
+      <div class="set-card">
+        <div class="set-head">
+          <span>Team Members</span>
+          <button class="btn btn-p btn-sm" onclick="Sett.openAddUser()">+ Add user</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="utab"><thead><tr>
+            <th>Name</th><th>Country</th><th>Role</th><th>Clients assigned</th><th>Status</th><th>Actions</th>
+          </tr></thead><tbody id="u-tbody"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Clients tab -->
+    <div id="gt-clients" class="gtab" style="margin-top:1rem">
+      <div class="set-card">
+        <div class="set-head">
+          <span>Client List</span>
+          <button class="btn btn-p btn-sm" onclick="Sett.openAddClient()">+ Add client</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="utab"><thead><tr>
+            <th>Client name</th><th>Factories</th><th>Assigned auditors</th><th>Actions</th>
+          </tr></thead><tbody id="c-tbody"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Data tab -->
+    <div id="gt-data" class="gtab" style="margin-top:1rem">
+      <div class="set-card">
+        <div class="set-head">Danger Zone</div>
+        <div style="padding:1rem;display:flex;gap:.6rem;flex-wrap:wrap">
+          <button class="btn btn-d btn-sm" onclick="Sett.wipeAll()">⚠ Wipe ALL data from Firebase</button>
+          <button class="btn btn-s btn-sm" onclick="Sett.changeDb()">🔧 Change Firebase URL</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════
+     MODALS
+════════════════════════════════════ -->
+
+<!-- Slot modal -->
+<div class="mov" id="m-slot">
+  <div class="modal">
+    <div class="mtitle" id="ms-title">Add Booking</div>
+    <input type="hidden" id="ms-id">
+    <div class="fg">
+      <label class="lbl">Date</label>
+      <input type="date" id="ms-date" class="inp">
+    </div>
+    <div class="fg">
+      <label class="lbl">Time slot</label>
+      <div class="slot-btns">
+        <button class="slt-btn" id="sb-f" onclick="Slot.pick('Full Day')">🌅 Full Day</button>
+        <button class="slt-btn" id="sb-a" onclick="Slot.pick('Half Day AM')">🌤 Half AM</button>
+        <button class="slt-btn" id="sb-p" onclick="Slot.pick('Half Day PM')">🌇 Half PM</button>
+      </div>
+      <input type="hidden" id="ms-type">
+    </div>
+    <div class="fg">
+      <label class="lbl">Client</label>
+      <select id="ms-client" class="sel" onchange="Slot.onClientChange()"><option value="">Select client…</option></select>
+    </div>
+    <div class="fg">
+      <label class="lbl">Factory</label>
+      <select id="ms-factory" class="sel"><option value="">Select factory…</option></select>
+    </div>
+    <div class="row2">
+      <div class="fg">
+        <label class="lbl">Expected Qty <span class="lbl-opt">(optional)</span></label>
+        <input type="number" id="ms-eqty" class="inp inp-num" placeholder="—" min="0" step="1">
+      </div>
+      <div class="fg">
+        <label class="lbl">Final Qty <span class="lbl-opt">(optional)</span></label>
+        <input type="number" id="ms-fqty" class="inp inp-num" placeholder="—" min="0" step="1">
+      </div>
+    </div>
+    <div class="fg">
+      <label class="lbl">Notes <span class="lbl-opt">(optional)</span></label>
+      <textarea id="ms-notes" class="inp ta" placeholder="Any additional notes…"></textarea>
+    </div>
+    <div id="ms-err" class="err-msg"></div>
+    <div class="mfoot">
+      <button class="btn btn-d btn-sm ml" id="ms-del" onclick="Slot.del()" style="display:none">Delete</button>
+      <button class="btn btn-s" onclick="M.close('m-slot')">Cancel</button>
+      <button class="btn btn-p" onclick="Slot.save()">Save booking</button>
+    </div>
+  </div>
+</div>
+
+<!-- User modal -->
+<div class="mov" id="m-user">
+  <div class="modal">
+    <div class="mtitle" id="mu-title">Add Team Member</div>
+    <input type="hidden" id="mu-id">
+    <div class="fg">
+      <label class="lbl">Full name</label>
+      <input type="text" id="mu-name" class="inp" placeholder="e.g. Jean Dupont">
+    </div>
+    <div class="row2">
+      <div class="fg">
+        <label class="lbl">Country</label>
+        <select id="mu-co" class="sel">
+          <option value="">Select…</option>
+          <option>France</option><option>Germany</option><option>United Kingdom</option>
+          <option>Spain</option><option>Italy</option><option>Belgium</option>
+          <option>Netherlands</option><option>Other</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label class="lbl">Role</label>
+        <select id="mu-role" class="sel">
+          <option value="auditor">Auditor</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+    </div>
+    <div class="fg">
+      <label class="lbl">PIN (4–6 digits)</label>
+      <input type="text" id="mu-pin" class="inp inp-pin" placeholder="1234" maxlength="6" inputmode="numeric">
+    </div>
+    <div id="mu-err" class="err-msg"></div>
+    <div class="mfoot">
+      <button class="btn btn-d btn-sm ml" id="mu-del" onclick="Sett.delUser()" style="display:none">Deactivate</button>
+      <button class="btn btn-s" onclick="M.close('m-user')">Cancel</button>
+      <button class="btn btn-p" onclick="Sett.saveUser()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Client modal -->
+<div class="mov" id="m-client">
+  <div class="modal modal-lg">
+    <div class="mtitle" id="mc-title">Add Client</div>
+    <input type="hidden" id="mc-id">
+    <div class="fg">
+      <label class="lbl">Client name</label>
+      <input type="text" id="mc-name" class="inp" placeholder="e.g. Renault">
+    </div>
+    <div class="fg">
+      <label class="lbl">Factories / sites <span class="lbl-opt">(one per line)</span></label>
+      <textarea id="mc-facs" class="inp ta" placeholder="Flins&#10;Douai&#10;Maubeuge"></textarea>
+    </div>
+    <div class="fg">
+      <label class="lbl">Assign to auditors</label>
+      <div class="chk-list" id="mc-users">
+        <div style="color:var(--txs);font-size:.8rem;padding:.3rem">No auditors yet.</div>
+      </div>
+    </div>
+    <div id="mc-err" class="err-msg"></div>
+    <div class="mfoot">
+      <button class="btn btn-d btn-sm ml" id="mc-del" onclick="Sett.delClient()" style="display:none">Delete client</button>
+      <button class="btn btn-s" onclick="M.close('m-client')">Cancel</button>
+      <button class="btn btn-p" onclick="Sett.saveClient()">Save client</button>
+    </div>
+  </div>
+</div>
+
+<!-- Tooltip -->
+<div id="tip" style="display:none;position:fixed;background:#1e293b;color:#fff;padding:.42rem .7rem;border-radius:6px;font-size:.73rem;z-index:500;pointer-events:none;max-width:230px;line-height:1.45"></div>
+
+<script>
+// ════════════════════════════════════
+// UTILS
+// ════════════════════════════════════
+const U = {
+  uuid(){ return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c==='x'?r:(r&3|8)).toString(16)}); },
+  today(){ return new Date().toISOString().slice(0,10); },
+  monthKey(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; },
+  monthLabel(d){ return d.toLocaleString('en-GB',{month:'long',year:'numeric'}); },
+  daysInMonth(y,m){ return new Date(y,m+1,0).getDate(); },
+  prevDays(y,m){ return new Date(y,m,0).getDate(); },
+  wd(y,m,d){ const w=new Date(y,m,d).getDay(); return w===0?6:w-1; }, // 0=Mon
+  slotCls(s){ return s==='Full Day'?'full':s==='Half Day AM'?'am':'pm'; },
+  chipCls(s){ return 'c-'+U.slotCls(s); },
+  badgeCls(s){ return 'b-'+U.slotCls(s); },
+  dotCls(s){ return 'd-'+U.slotCls(s); },
+  flag(c){ const f={France:'🇫🇷',Germany:'🇩🇪','United Kingdom':'🇬🇧',Spain:'🇪🇸',Italy:'🇮🇹',Belgium:'🇧🇪',Netherlands:'🇳🇱'}; return f[c]||'🌍'; },
+  esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); },
+  fmt(d){ if(!d)return''; const[y,m,day]=d.split('-'); return`${day}/${m}/${y}`; },
+  uniq(arr){ return [...new Set(arr)].filter(Boolean).sort((a,b)=>a.localeCompare(b)); },
+  int(v){ const n=parseInt(v,10); return isNaN(n)?null:Math.max(0,n); }
+};
+
+// ════════════════════════════════════
+// LOCAL STORAGE
+// ════════════════════════════════════
+const LS = {
+  g(k,fb=null){ try{const v=localStorage.getItem(k);return v?JSON.parse(v):fb}catch{return fb} },
+  s(k,v){ try{localStorage.setItem(k,JSON.stringify(v))}catch{} },
+  rm(k){ localStorage.removeItem(k); },
+  getDbUrl(){ return this.g('aca_db',''); },
+  setDbUrl(u){ this.s('aca_db',u); },
+  getSess(){ return this.g('aca_sess',null); },
+  setSess(s){ this.s('aca_sess',s); },
+  clrSess(){ this.rm('aca_sess'); }
+};
+
+// ════════════════════════════════════
+// FIREBASE REST API
+// ════════════════════════════════════
+const FB = {
+  url: '',
+  _u(path){ return `${this.url}/${path}.json`; },
+  _opts(extra={}){ return {mode:'cors',credentials:'omit',...extra}; },
+  async get(path){
+    const r=await fetch(this._u(path),this._opts());
+    if(!r.ok){ const e=new Error(`HTTP ${r.status}`); e.status=r.status; throw e; }
+    return r.json();
+  },
+  async set(path,data){
+    const r=await fetch(this._u(path),this._opts({method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}));
+    if(!r.ok){ const e=new Error(`HTTP ${r.status}`); e.status=r.status; throw e; }
+    return r.json();
+  },
+  async update(path,data){
+    const r=await fetch(this._u(path),this._opts({method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}));
+    if(!r.ok){ const e=new Error(`HTTP ${r.status}`); e.status=r.status; throw e; }
+    return r.json();
+  },
+  async del(path){
+    const r=await fetch(this._u(path),this._opts({method:'DELETE'}));
+    if(!r.ok){ const e=new Error(`HTTP ${r.status}`); e.status=r.status; throw e; }
+  }
+};
+
+// ════════════════════════════════════
+// CACHE (in-memory)
+// ════════════════════════════════════
+const Cache = {
+  users: {},    // { id: user }
+  clients: {},  // { id: client }
+  entries: {},  // { id: entry }
+  async loadAll(){
+    const [users,clients,entries]=await Promise.all([
+      FB.get('users').catch(()=>({})),
+      FB.get('clients').catch(()=>({})),
+      FB.get('entries').catch(()=>({}))
+    ]);
+    this.users   = users   || {};
+    this.clients = clients || {};
+    this.entries = entries || {};
+  },
+  usersArr(){ return Object.values(this.users); },
+  clientsArr(){ return Object.values(this.clients); },
+  entriesArr(){ return Object.values(this.entries); },
+  clientsFor(uid){ return this.clientsArr().filter(c=>(c.userIds||[]).includes(uid)); }
+};
+
+// ════════════════════════════════════
+// UI HELPERS
+// ════════════════════════════════════
+const M = {
+  open(id){ document.getElementById(id).classList.add('open'); },
+  close(id){ document.getElementById(id).classList.remove('open'); }
+};
+document.querySelectorAll('.mov').forEach(o=>o.addEventListener('click',e=>{ if(e.target===o)o.classList.remove('open'); }));
+document.addEventListener('keydown',e=>{ if(e.key==='Escape')document.querySelectorAll('.mov.open').forEach(o=>o.classList.remove('open')); });
+
+const Spinner = { on(){ document.getElementById('spin').classList.add('on'); }, off(){ document.getElementById('spin').classList.remove('on'); } };
+
+let _tId;
+function toast(msg,type='ok'){
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.className='toast show '+(type==='err'?'bad':'ok');
+  clearTimeout(_tId);
+  _tId=setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+function show(name){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s-'+name).classList.add('active');
+}
+
+// ════════════════════════════════════
+// SETUP
+// ════════════════════════════════════
+const Setup = {
+  async connect(){
+    const raw=document.getElementById('setup-url').value.trim().replace(/\/$/,'');
+    const err=document.getElementById('setup-err');
+    err.style.display='none';
+    if(!raw||!raw.startsWith('https://')){
+      err.textContent='Please enter a valid https:// URL.';
+      err.style.display='block'; return;
+    }
+    Spinner.on();
+    FB.url=raw;
+    try{
+      const users=await FB.get('users');
+      // First-time: create default admin
+      if(!users||!Object.keys(users).length){
+        const id=U.uuid();
+        await FB.set(`users/${id}`,{id,name:'Admin',pin:'0000',country:'',role:'admin',active:true});
+        await Cache.loadAll();
+        toast('Firebase connected! Default admin created (PIN: 0000).');
+      } else {
+        await Cache.loadAll();
+        toast('Firebase connected!');
+      }
+      LS.setDbUrl(raw);
+      App._showLogin();
+    } catch(e){
+      console.error('Firebase connect error:', e);
+      const detail='<br><small style="opacity:.7">Technical detail: '+String(e.message||e)+'</small>';
+      if(e.status===401||e.status===403){
+        err.innerHTML='<strong>Access denied ('+e.status+') — security rules are blocking access.</strong><br>Go to Firebase Console → Realtime Database → <strong>Rules</strong> tab, replace everything with:<br><code>{ "rules": { ".read": true, ".write": true } }</code><br>Then click <strong>Publish</strong>.'+detail;
+      } else if(e.status===404){
+        err.innerHTML='<strong>Database not found (404).</strong> Double-check your URL — it must end with <code>.firebasedatabase.app</code>.'+detail;
+      } else {
+        // Network-level failure — likely CORS from file:// or computer:// origin
+        err.innerHTML='<strong>Network error — the browser blocked the request.</strong><br>'
+          +'This usually means the file is being opened locally (file:// or via an app viewer) instead of from a real web server. '
+          +'<strong>To fix:</strong> host this HTML file on any web server (see options below) and open it from there.<br><br>'
+          +'<strong>Free hosting options (2 minutes each):</strong><br>'
+          +'• <strong>Netlify Drop</strong>: go to <code>app.netlify.com/drop</code>, drag &amp; drop this HTML file → instant public URL<br>'
+          +'• <strong>GitHub Pages</strong>: push to a GitHub repo, enable Pages in Settings → free <code>github.io</code> URL<br>'
+          +'• <strong>Your company server</strong>: copy the file to any web server folder'+detail;
+      }
+      err.style.display='block';
+    } finally { Spinner.off(); }
+  }
+};
+
+// ════════════════════════════════════
+// APP
+// ════════════════════════════════════
+const App = {
+  user: null,
+
+  async init(){
+    const dbUrl=LS.getDbUrl();
+    if(!dbUrl){ show('setup'); return; }
+    FB.url=dbUrl;
+    Spinner.on();
+    try{
+      await Cache.loadAll();
+      const sess=LS.getSess();
+      if(sess){
+        const u=Cache.users[sess.uid];
+        if(u&&u.active){ this.user=u; this._afterLogin(); Spinner.off(); return; }
+      }
+      this._showLogin();
+    } catch{ this._showLogin(); }
+    finally{ Spinner.off(); }
+  },
+
+  _showLogin(){
+    const sel=document.getElementById('ln-name');
+    sel.innerHTML='<option value="">Select your name…</option>';
+    Cache.usersArr().filter(u=>u.active).sort((a,b)=>a.name.localeCompare(b.name)).forEach(u=>{
+      sel.innerHTML+=`<option value="${u.id}">${U.esc(u.name)}${u.country?' ('+u.country+')':''}</option>`;
+    });
+    document.getElementById('ln-err').style.display='none';
+    document.getElementById('ln-pin').value='';
+    show('login');
+  },
+
+  login(){
+    const uid=document.getElementById('ln-name').value;
+    const pin=document.getElementById('ln-pin').value;
+    const err=document.getElementById('ln-err');
+    err.style.display='none';
+    if(!uid){err.textContent='Please select your name.';err.style.display='block';return;}
+    if(!pin){err.textContent='Please enter your PIN.';err.style.display='block';return;}
+    const u=Cache.users[uid];
+    if(!u||u.pin!==pin||!u.active){err.textContent='Incorrect PIN. Please try again.';err.style.display='block';return;}
+    this.user=u;
+    LS.setSess({uid:u.id});
+    this._afterLogin();
+  },
+
+  _afterLogin(){
+    const u=this.user;
+    document.getElementById('hdr-cal').textContent=u.name+"'s Calendar";
+    document.getElementById('hdr-cal-u').textContent=u.name;
+    if(u.role==='admin'){ show('adm'); Adm.init(); }
+    else{ show('cal'); Cal.init(); }
+  },
+
+  logout(){ LS.clrSess(); this.user=null; this._showLogin(); },
+  goSettings(){ show('set'); Sett.init(); },
+  async goAdmin(){ Spinner.on(); await Cache.loadAll(); Spinner.off(); show('adm'); Adm.init(); }
+};
+
+// ════════════════════════════════════
+// CALENDAR (Auditor)
+// ════════════════════════════════════
+const Cal = {
+  cur: new Date(),
+  init(){ this.cur=new Date(); this.render(); },
+  prev(){ this.cur=new Date(this.cur.getFullYear(),this.cur.getMonth()-1,1); this.render(); },
+  next(){ this.cur=new Date(this.cur.getFullYear(),this.cur.getMonth()+1,1); this.render(); },
+
+  render(){
+    const y=this.cur.getFullYear(), m=this.cur.getMonth(), today=U.today(), uid=App.user.id;
+    document.getElementById('cal-lbl').textContent=U.monthLabel(this.cur);
+    const entries=Cache.entriesArr().filter(e=>e.userId===uid);
+    const map={};
+    entries.forEach(e=>{if(!map[e.date])map[e.date]=[];map[e.date].push(e);});
+    const firstWd=U.wd(y,m,1), dCount=U.daysInMonth(y,m), prevDays=U.prevDays(y,m);
+    const grid=document.getElementById('cal-grid');
+    while(grid.children.length>7) grid.removeChild(grid.lastChild);
+
+    // Leading
+    for(let i=firstWd-1;i>=0;i--){ const el=doc('div','cal-day oth'); el.innerHTML=`<div class="dn">${prevDays-i}</div>`; grid.appendChild(el); }
+    // Days
+    for(let day=1;day<=dCount;day++){
+      const ds=`${y}-${str(m+1)}-${str(day)}`;
+      const isT=ds===today;
+      const de=map[ds]||[];
+      let chips='';
+      de.forEach(e=>{
+        const cls=U.chipCls(e.slot);
+        const lbl=e.clientName||e.slot;
+        const tip=`${e.slot} – ${U.esc(e.clientName||'')} @ ${U.esc(e.factory||'')}${e.expectedQty!=null?' | Exp: '+e.expectedQty:''}${e.finalQty!=null?' | Final: '+e.finalQty:''}`;
+        chips+=`<div class="chip ${cls}" title="${U.esc(tip)}" onclick="event.stopPropagation();Slot.edit('${e.id}')">${U.esc(lbl)}</div>`;
+      });
+      const el=doc('div','cal-day'+(isT?' td':''));
+      el.innerHTML=`<div class="dn">${day}</div><div class="dslots">${chips}</div>`;
+      el.onclick=()=>Slot.add(ds);
+      grid.appendChild(el);
+    }
+    // Trailing
+    const total=Math.ceil((firstWd+dCount)/7)*7;
+    for(let i=1;i<=total-firstWd-dCount;i++){ const el=doc('div','cal-day oth'); el.innerHTML=`<div class="dn">${i}</div>`; grid.appendChild(el); }
+  }
+};
+
+// ════════════════════════════════════
+// SLOT MODAL
+// ════════════════════════════════════
+const Slot = {
+  add(date){
+    this._reset();
+    document.getElementById('ms-title').textContent='Add Booking';
+    document.getElementById('ms-date').value=date||U.today();
+    document.getElementById('ms-del').style.display='none';
+    this._populateClients(App.user.id, '', '');
+    M.open('m-slot');
+  },
+
+  edit(id){
+    const e=Cache.entries[id]; if(!e) return;
+    this._reset();
+    document.getElementById('ms-title').textContent='Edit Booking';
+    document.getElementById('ms-id').value=id;
+    document.getElementById('ms-date').value=e.date;
+    document.getElementById('ms-notes').value=e.notes||'';
+    document.getElementById('ms-eqty').value=e.expectedQty!=null?e.expectedQty:'';
+    document.getElementById('ms-fqty').value=e.finalQty!=null?e.finalQty:'';
+    document.getElementById('ms-del').style.display='inline-flex';
+    this.pick(e.slot);
+    this._populateClients(e.userId||App.user.id, e.clientId||'', e.factory||'');
+    M.open('m-slot');
+  },
+
+  pick(type){
+    document.getElementById('ms-type').value=type;
+    ['sb-f','sb-a','sb-p'].forEach(id=>document.getElementById(id).className='slt-btn');
+    if(type==='Full Day') document.getElementById('sb-f').classList.add('on-full');
+    else if(type==='Half Day AM') document.getElementById('sb-a').classList.add('on-am');
+    else document.getElementById('sb-p').classList.add('on-pm');
+  },
+
+  _reset(){
+    document.getElementById('ms-id').value='';
+    document.getElementById('ms-date').value='';
+    document.getElementById('ms-type').value='';
+    document.getElementById('ms-notes').value='';
+    document.getElementById('ms-eqty').value='';
+    document.getElementById('ms-fqty').value='';
+    document.getElementById('ms-err').style.display='none';
+    ['sb-f','sb-a','sb-p'].forEach(id=>document.getElementById(id).className='slt-btn');
+  },
+
+  _populateClients(uid, selectedCid, selectedFac){
+    const clients=Cache.clientsFor(uid);
+    const csel=document.getElementById('ms-client');
+    csel.innerHTML='<option value="">Select client…</option>';
+    clients.forEach(c=>{
+      csel.innerHTML+=`<option value="${c.id}" ${c.id===selectedCid?'selected':''}>${U.esc(c.name)}</option>`;
+    });
+    this._populateFactories(selectedCid, selectedFac);
+  },
+
+  _populateFactories(clientId, selectedFac){
+    const fsel=document.getElementById('ms-factory');
+    fsel.innerHTML='<option value="">Select factory…</option>';
+    if(!clientId){ return; }
+    const c=Cache.clients[clientId];
+    if(!c) return;
+    (c.factories||[]).forEach(f=>{
+      fsel.innerHTML+=`<option value="${U.esc(f)}" ${f===selectedFac?'selected':''}>${U.esc(f)}</option>`;
+    });
+    if(selectedFac && !(c.factories||[]).includes(selectedFac)){
+      fsel.innerHTML+=`<option value="${U.esc(selectedFac)}" selected>${U.esc(selectedFac)}</option>`;
+    }
+  },
+
+  onClientChange(){
+    const cid=document.getElementById('ms-client').value;
+    this._populateFactories(cid,'');
+  },
+
+  async save(){
+    const id=document.getElementById('ms-id').value;
+    const date=document.getElementById('ms-date').value;
+    const type=document.getElementById('ms-type').value;
+    const clientId=document.getElementById('ms-client').value;
+    const factory=document.getElementById('ms-factory').value;
+    const eqty=U.int(document.getElementById('ms-eqty').value);
+    const fqty=U.int(document.getElementById('ms-fqty').value);
+    const notes=document.getElementById('ms-notes').value.trim();
+    const err=document.getElementById('ms-err');
+    err.style.display='none';
+
+    if(!date){err.textContent='Please select a date.';err.style.display='block';return;}
+    if(!type){err.textContent='Please select a time slot.';err.style.display='block';return;}
+    if(!clientId){err.textContent='Please select a client.';err.style.display='block';return;}
+    if(!factory){err.textContent='Please select a factory.';err.style.display='block';return;}
+
+    const uid=App.user.id;
+    const u=App.user;
+    const c=Cache.clients[clientId];
+    const clientName=c?c.name:'';
+
+    // Conflict check
+    const conflict=Cache.entriesArr().find(e=>e.id!==id&&e.userId===uid&&e.date===date&&e.slot===type);
+    if(conflict){err.textContent=`You already have a "${type}" booking on this date.`;err.style.display='block';return;}
+
+    Spinner.on();
+    try{
+      const entryId=id||U.uuid();
+      const base=id?{...Cache.entries[id]}:{};
+      const entry={
+        ...base,
+        id:entryId,
+        userId:uid,
+        userName:u.name,
+        userCountry:u.country||'',
+        date,slot:type,
+        clientId,clientName,factory,
+        expectedQty:eqty,
+        finalQty:fqty,
+        notes,
+        updated:Date.now(),
+        created:base.created||Date.now()
+      };
+      await FB.set(`entries/${entryId}`,entry);
+      Cache.entries[entryId]=entry;
+      M.close('m-slot');
+      Cal.render();
+      toast(id?'Booking updated.':'Booking saved.');
+    } catch{ toast('Save failed. Check your connection.','err'); }
+    finally{ Spinner.off(); }
+  },
+
+  async del(){
+    const id=document.getElementById('ms-id').value;
+    if(!id||!confirm('Delete this booking?')) return;
+    Spinner.on();
+    try{
+      await FB.del(`entries/${id}`);
+      delete Cache.entries[id];
+      M.close('m-slot');
+      Cal.render();
+      toast('Booking deleted.');
+    } catch{ toast('Delete failed.','err'); }
+    finally{ Spinner.off(); }
+  }
+};
+
+// ════════════════════════════════════
+// ADMIN DASHBOARD
+// ════════════════════════════════════
+const Adm = {
+  cur: new Date(),
+  view: 'tl',
+  filtered: [],
+
+  init(){
+    this.cur=new Date();
+    document.getElementById('f-mo').value=U.monthKey(this.cur);
+    this._fillFilterOpts();
+    this.applyFilters();
+  },
+
+  async refresh(){
+    Spinner.on();
+    await Cache.loadAll();
+    Spinner.off();
+    this.init();
+    toast('Dashboard refreshed.');
+  },
+
+  setView(v){
+    this.view=v;
+    document.getElementById('vw-tl').style.display=v==='tl'?'block':'none';
+    document.getElementById('vw-ls').style.display=v==='ls'?'block':'none';
+    document.getElementById('nt-tl').className='ntab'+(v==='tl'?' on':'');
+    document.getElementById('nt-ls').className='ntab'+(v==='ls'?' on':'');
+    this._render();
+  },
+
+  prev(){ this.cur=new Date(this.cur.getFullYear(),this.cur.getMonth()-1,1); document.getElementById('f-mo').value=U.monthKey(this.cur); this.applyFilters(); },
+  next(){ this.cur=new Date(this.cur.getFullYear(),this.cur.getMonth()+1,1); document.getElementById('f-mo').value=U.monthKey(this.cur); this.applyFilters(); },
+
+  _fillFilterOpts(){
+    const all=Cache.entriesArr();
+    const countries=U.uniq(all.map(e=>e.userCountry));
+    const users=U.uniq(all.map(e=>e.userName));
+    const clients=U.uniq(all.map(e=>e.clientName));
+    const factories=U.uniq(all.map(e=>e.factory));
+    const fill=(id,items)=>{
+      const sel=document.getElementById(id), cur=sel.value, base=sel.options[0].outerHTML;
+      sel.innerHTML=base+items.map(x=>`<option ${cur===x?'selected':''}>${U.esc(x)}</option>`).join('');
+    };
+    fill('f-co',countries); fill('f-us',users); fill('f-cl',clients); fill('f-fa',factories);
+  },
+
+  applyFilters(){
+    const mk=document.getElementById('f-mo').value;
+    if(mk){ const[y,m]=mk.split('-').map(Number); this.cur=new Date(y,m-1,1); }
+    document.getElementById('adm-lbl').textContent=U.monthLabel(this.cur);
+    const co=document.getElementById('f-co').value;
+    const us=document.getElementById('f-us').value;
+    const cl=document.getElementById('f-cl').value;
+    const fa=document.getElementById('f-fa').value;
+    const cur=U.monthKey(this.cur);
+    this.filtered=Cache.entriesArr().filter(e=>{
+      if(mk&&!e.date.startsWith(cur)) return false;
+      if(co&&e.userCountry!==co) return false;
+      if(us&&e.userName!==us) return false;
+      if(cl&&e.clientName!==cl) return false;
+      if(fa&&e.factory!==fa) return false;
+      return true;
+    });
+    this._fillFilterOpts();
+    this._renderStats();
+    this._render();
+  },
+
+  clearFilters(){
+    ['f-co','f-us','f-cl','f-fa'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('f-mo').value=U.monthKey(this.cur);
+    this.applyFilters();
+  },
+
+  _renderStats(){
+    const mk=U.monthKey(this.cur);
+    const mo=Cache.entriesArr().filter(e=>e.date.startsWith(mk));
+    const aud=U.uniq(Cache.entriesArr().map(e=>e.userName)).length;
+    const cli=U.uniq(mo.map(e=>e.clientName)).length;
+    const full=mo.filter(e=>e.slot==='Full Day').length;
+    const half=mo.filter(e=>e.slot!=='Full Day').length;
+    const expTotal=mo.reduce((s,e)=>s+(e.expectedQty||0),0);
+    const finTotal=mo.reduce((s,e)=>s+(e.finalQty||0),0);
+    document.getElementById('adm-stats').innerHTML=
+      `<div class="stat"><div class="sv">${aud}</div><div class="sl">Auditors tracked</div></div>`+
+      `<div class="stat"><div class="sv">${mo.length}</div><div class="sl">Bookings this month</div></div>`+
+      `<div class="stat"><div class="sv">${cli}</div><div class="sl">Clients this month</div></div>`+
+      `<div class="stat"><div class="sv">${full}</div><div class="sl">Full days</div></div>`+
+      `<div class="stat"><div class="sv">${half}</div><div class="sl">Half days</div></div>`+
+      `<div class="stat"><div class="sv">${expTotal||'—'}</div><div class="sl">Expected qty total</div></div>`+
+      `<div class="stat"><div class="sv">${finTotal||'—'}</div><div class="sl">Final qty total</div></div>`;
+  },
+
+  _render(){
+    if(this.view==='tl') this._renderTl();
+    else this._renderList();
+  },
+
+  _renderTl(){
+    const y=this.cur.getFullYear(), m=this.cur.getMonth();
+    const dCount=U.daysInMonth(y,m), today=U.today();
+
+    // Build user → date map from filtered entries
+    const umap={};
+    this.filtered.forEach(e=>{
+      if(!umap[e.userName]) umap[e.userName]={country:e.userCountry,byDate:{}};
+      if(!umap[e.userName].byDate[e.date]) umap[e.userName].byDate[e.date]=[];
+      umap[e.userName].byDate[e.date].push(e);
+    });
+    // Also add users with no entries this month (from cache)
+    Cache.usersArr().filter(u=>u.role==='auditor'&&u.active).forEach(u=>{
+      if(!umap[u.name]) umap[u.name]={country:u.country||'',byDate:{}};
+    });
+    const names=Object.keys(umap).sort();
+
+    if(!names.length){
+      document.getElementById('tl-tbl').innerHTML='<tr><td style="padding:2rem;text-align:center;color:var(--txs)">No auditors found. Add users in ⚙ Settings.</td></tr>';
+      return;
+    }
+
+    let hdr='<thead><tr><th>Auditor</th>';
+    for(let d=1;d<=dCount;d++){
+      const ds=`${y}-${str(m+1)}-${str(d)}`;
+      const isT=ds===today;
+      const wk=new Date(y,m,d).toLocaleString('en-GB',{weekday:'short'}).slice(0,2);
+      hdr+=`<th class="${isT?'tc-td':''}">${wk}<br>${d}</th>`;
+    }
+    hdr+='</tr></thead>';
+
+    let body='<tbody>';
+    names.forEach(name=>{
+      const ud=umap[name];
+      body+=`<tr><td><div class="tl-un">${U.flag(ud.country)} ${U.esc(name)}</div><div class="tl-co">${U.esc(ud.country)}</div></td>`;
+      for(let d=1;d<=dCount;d++){
+        const ds=`${y}-${str(m+1)}-${str(d)}`;
+        const isT=ds===today;
+        const de=ud.byDate[ds]||[];
+        let dots='';
+        de.forEach(e=>{
+          const dc=U.dotCls(e.slot);
+          const tip=`${U.esc(e.slot)}\n${U.esc(e.clientName||'')} @ ${U.esc(e.factory||'')}${e.expectedQty!=null?'\nExp: '+e.expectedQty:''}${e.finalQty!=null?' | Final: '+e.finalQty:''}${e.notes?'\n'+U.esc(e.notes):''}`;
+          dots+=`<div class="tl-dot ${dc}" data-tip="${tip.replace(/"/g,'&quot;').replace(/\n/g,'&#10;')}"></div>`;
+        });
+        body+=`<td class="${isT?'tc-td':''}"><div class="tl-cell">${dots}</div></td>`;
+      }
+      body+='</tr>';
+    });
+    body+='</tbody>';
+    document.getElementById('tl-tbl').innerHTML=hdr+body;
+
+    // Tooltip
+    const tip=document.getElementById('tip');
+    document.getElementById('tl-tbl').querySelectorAll('.tl-dot').forEach(dot=>{
+      dot.addEventListener('mouseenter',e=>{ tip.innerHTML=(e.target.dataset.tip||'').replace(/&#10;/g,'<br>'); tip.style.display='block'; });
+      dot.addEventListener('mousemove',e=>{ tip.style.left=(e.clientX+12)+'px'; tip.style.top=(e.clientY-10)+'px'; });
+      dot.addEventListener('mouseleave',()=>{ tip.style.display='none'; });
+    });
+  },
+
+  _renderList(){
+    const f=this.filtered;
+    if(!f.length){
+      document.getElementById('ls-content').innerHTML='<div class="empty"><div class="empty-ic">📭</div><div class="empty-t">No bookings</div><div class="empty-s">Adjust the filters above.</div></div>';
+      return;
+    }
+    const sorted=[...f].sort((a,b)=>a.date<b.date?-1:1);
+    let html='<div style="overflow-x:auto"><table class="ltab"><thead><tr><th>Date</th><th>Auditor</th><th>Country</th><th>Slot</th><th>Client</th><th>Factory</th><th>Exp. Qty</th><th>Final Qty</th><th>Notes</th></tr></thead><tbody>';
+    sorted.forEach(e=>{
+      html+=`<tr>
+        <td><strong>${U.fmt(e.date)}</strong></td>
+        <td>${U.flag(e.userCountry)} ${U.esc(e.userName)}</td>
+        <td>${U.esc(e.userCountry)}</td>
+        <td><span class="badge ${U.badgeCls(e.slot)}">${U.esc(e.slot)}</span></td>
+        <td>${U.esc(e.clientName)}</td>
+        <td>${U.esc(e.factory)}</td>
+        <td style="text-align:right">${e.expectedQty!=null?e.expectedQty:'<span style="color:var(--txs)">—</span>'}</td>
+        <td style="text-align:right">${e.finalQty!=null?e.finalQty:'<span style="color:var(--txs)">—</span>'}</td>
+        <td style="color:var(--txs);font-size:.76rem">${U.esc(e.notes)}</td>
+      </tr>`;
+    });
+    html+='</tbody></table></div>';
+    document.getElementById('ls-content').innerHTML=html;
+  },
+
+  exportCSV(){
+    const f=this.filtered;
+    if(!f.length){ toast('No entries to export.','err'); return; }
+    const s=[...f].sort((a,b)=>a.date<b.date?-1:1);
+    let csv='Date,Auditor,Country,Slot,Client,Factory,Expected Qty,Final Qty,Notes\n';
+    s.forEach(e=>{ csv+=[e.date,e.userName,e.userCountry,e.slot,e.clientName,e.factory,e.expectedQty!=null?e.expectedQty:'',e.finalQty!=null?e.finalQty:'',e.notes||''].map(v=>'"'+String(v||'').replace(/"/g,'""')+'"').join(',')+'\n'; });
+    const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([csv],{type:'text/csv'})),download:`auditor-calendar-${U.monthKey(this.cur)}.csv`});
+    a.click();
+    toast('CSV exported.');
+  }
+};
+
+// ════════════════════════════════════
+// SETTINGS
+// ════════════════════════════════════
+const Sett = {
+  _activeTab: 'users',
+
+  init(){ this.tab(this._activeTab); },
+
+  tab(name){
+    this._activeTab=name;
+    document.querySelectorAll('.stab').forEach((t,i)=>t.classList.toggle('on',['users','clients','data'][i]===name));
+    document.querySelectorAll('.gtab').forEach(t=>t.classList.remove('on'));
+    document.getElementById('gt-'+name).classList.add('on');
+    if(name==='users') this._renderUsers();
+    if(name==='clients') this._renderClients();
+  },
+
+  _renderUsers(){
+    const users=Cache.usersArr().sort((a,b)=>a.name.localeCompare(b.name));
+    if(!users.length){ document.getElementById('u-tbody').innerHTML=`<tr><td colspan="6" style="text-align:center;padding:1.5rem;color:var(--txs)">No users yet.</td></tr>`; return; }
+    document.getElementById('u-tbody').innerHTML=users.map(u=>{
+      const uClients=Cache.clientsArr().filter(c=>(c.userIds||[]).includes(u.id)).map(c=>U.esc(c.name)).join(', ')||'<span style="color:var(--txs)">none</span>';
+      return `<tr>
+        <td><strong>${U.esc(u.name)}</strong></td>
+        <td>${u.country?U.flag(u.country)+' '+U.esc(u.country):'-'}</td>
+        <td><span class="badge ${u.role==='admin'?'b-adm':'b-aud'}">${u.role}</span></td>
+        <td style="font-size:.76rem">${uClients}</td>
+        <td><span class="badge ${u.active?'b-on':'b-off'}">${u.active?'Active':'Inactive'}</span></td>
+        <td><button class="btn btn-s btn-sm" onclick="Sett.editUser('${u.id}')">Edit</button></td>
+      </tr>`;
+    }).join('');
+  },
+
+  _renderClients(){
+    const clients=Cache.clientsArr().sort((a,b)=>a.name.localeCompare(b.name));
+    if(!clients.length){ document.getElementById('c-tbody').innerHTML=`<tr><td colspan="4" style="text-align:center;padding:1.5rem;color:var(--txs)">No clients yet. Add your first client.</td></tr>`; return; }
+    document.getElementById('c-tbody').innerHTML=clients.map(c=>{
+      const facs=(c.factories||[]).map(f=>U.esc(f)).join(', ')||'-';
+      const auditors=(c.userIds||[]).map(uid=>Cache.users[uid]?.name||'').filter(Boolean).join(', ')||'-';
+      return `<tr>
+        <td><strong>${U.esc(c.name)}</strong></td>
+        <td style="font-size:.76rem;color:var(--txs)">${facs}</td>
+        <td style="font-size:.76rem">${auditors}</td>
+        <td><button class="btn btn-s btn-sm" onclick="Sett.editClient('${c.id}')">Edit</button></td>
+      </tr>`;
+    }).join('');
+  },
+
+  // ── User modal ──
+  openAddUser(){
+    document.getElementById('mu-title').textContent='Add Team Member';
+    document.getElementById('mu-id').value='';
+    document.getElementById('mu-name').value='';
+    document.getElementById('mu-co').value='';
+    document.getElementById('mu-role').value='auditor';
+    document.getElementById('mu-pin').value='';
+    document.getElementById('mu-err').style.display='none';
+    document.getElementById('mu-del').style.display='none';
+    M.open('m-user');
+  },
+
+  editUser(id){
+    const u=Cache.users[id]; if(!u) return;
+    document.getElementById('mu-title').textContent='Edit Team Member';
+    document.getElementById('mu-id').value=u.id;
+    document.getElementById('mu-name').value=u.name;
+    document.getElementById('mu-co').value=u.country||'';
+    document.getElementById('mu-role').value=u.role;
+    document.getElementById('mu-pin').value=u.pin;
+    document.getElementById('mu-err').style.display='none';
+    document.getElementById('mu-del').style.display=u.id===App.user.id?'none':'inline-flex';
+    M.open('m-user');
+  },
+
+  async saveUser(){
+    const id=document.getElementById('mu-id').value;
+    const name=document.getElementById('mu-name').value.trim();
+    const country=document.getElementById('mu-co').value;
+    const role=document.getElementById('mu-role').value;
+    const pin=document.getElementById('mu-pin').value.trim();
+    const err=document.getElementById('mu-err');
+    err.style.display='none';
+    if(!name){err.textContent='Name is required.';err.style.display='block';return;}
+    if(!pin||pin.length<4||!/^\d+$/.test(pin)){err.textContent='PIN must be 4–6 digits.';err.style.display='block';return;}
+    Spinner.on();
+    try{
+      const uid=id||U.uuid();
+      const existing=Cache.users[uid]||{};
+      const user={...existing,id:uid,name,country,role,pin,active:existing.active!==false};
+      await FB.set(`users/${uid}`,user);
+      Cache.users[uid]=user;
+      M.close('m-user');
+      this._renderUsers();
+      toast('User saved.');
+    } catch{ toast('Save failed.','err'); }
+    finally{ Spinner.off(); }
+  },
+
+  async delUser(){
+    const id=document.getElementById('mu-id').value;
+    if(!id||!confirm('Deactivate this user?')) return;
+    Spinner.on();
+    try{
+      const u={...Cache.users[id],active:false};
+      await FB.set(`users/${id}`,u);
+      Cache.users[id]=u;
+      M.close('m-user');
+      this._renderUsers();
+      toast('User deactivated.');
+    } catch{ toast('Failed.','err'); }
+    finally{ Spinner.off(); }
+  },
+
+  // ── Client modal ──
+  openAddClient(){
+    document.getElementById('mc-title').textContent='Add Client';
+    document.getElementById('mc-id').value='';
+    document.getElementById('mc-name').value='';
+    document.getElementById('mc-facs').value='';
+    document.getElementById('mc-err').style.display='none';
+    document.getElementById('mc-del').style.display='none';
+    this._renderUserCheckboxes('');
+    M.open('m-client');
+  },
+
+  editClient(id){
+    const c=Cache.clients[id]; if(!c) return;
+    document.getElementById('mc-title').textContent='Edit Client';
+    document.getElementById('mc-id').value=id;
+    document.getElementById('mc-name').value=c.name||'';
+    document.getElementById('mc-facs').value=(c.factories||[]).join('\n');
+    document.getElementById('mc-err').style.display='none';
+    document.getElementById('mc-del').style.display='inline-flex';
+    this._renderUserCheckboxes(id);
+    M.open('m-client');
+  },
+
+  _renderUserCheckboxes(clientId){
+    const auditors=Cache.usersArr().filter(u=>u.role==='auditor'&&u.active).sort((a,b)=>a.name.localeCompare(b.name));
+    const c=Cache.clients[clientId];
+    const assigned=c?c.userIds||[]:[];
+    if(!auditors.length){
+      document.getElementById('mc-users').innerHTML='<div style="color:var(--txs);font-size:.8rem;padding:.3rem">No auditors yet. Add users first.</div>';
+      return;
+    }
+    document.getElementById('mc-users').innerHTML=auditors.map(u=>`
+      <label class="chk-item">
+        <input type="checkbox" value="${u.id}" ${assigned.includes(u.id)?'checked':''}>
+        ${U.flag(u.country)} ${U.esc(u.name)}${u.country?' ('+u.country+')':''}
+      </label>`).join('');
+  },
+
+  async saveClient(){
+    const id=document.getElementById('mc-id').value;
+    const name=document.getElementById('mc-name').value.trim();
+    const facsRaw=document.getElementById('mc-facs').value;
+    const factories=facsRaw.split('\n').map(s=>s.trim()).filter(Boolean);
+    const err=document.getElementById('mc-err');
+    err.style.display='none';
+    if(!name){err.textContent='Client name is required.';err.style.display='block';return;}
+    const userIds=[...document.querySelectorAll('#mc-users input:checked')].map(cb=>cb.value);
+    Spinner.on();
+    try{
+      const cid=id||U.uuid();
+      const client={id:cid,name,factories,userIds};
+      await FB.set(`clients/${cid}`,client);
+      Cache.clients[cid]=client;
+      M.close('m-client');
+      this._renderClients();
+      toast('Client saved.');
+    } catch{ toast('Save failed.','err'); }
+    finally{ Spinner.off(); }
+  },
+
+  async delClient(){
+    const id=document.getElementById('mc-id').value;
+    if(!id||!confirm('Delete this client? This will NOT remove existing bookings.')) return;
+    Spinner.on();
+    try{
+      await FB.del(`clients/${id}`);
+      delete Cache.clients[id];
+      M.close('m-client');
+      this._renderClients();
+      toast('Client deleted.');
+    } catch{ toast('Failed.','err'); }
+    finally{ Spinner.off(); }
+  },
+
+  async wipeAll(){
+    if(!confirm('⚠ This will permanently delete ALL data (users, clients, bookings) from Firebase.\n\nAre you absolutely sure?')) return;
+    Spinner.on();
+    try{
+      await FB.set('users',null);
+      await FB.set('clients',null);
+      await FB.set('entries',null);
+      LS.clrSess();
+      toast('All data wiped. Reloading…');
+      setTimeout(()=>location.reload(),1500);
+    } catch{ toast('Failed.','err'); }
+    finally{ Spinner.off(); }
+  },
+
+  changeDb(){
+    if(!confirm('Change Firebase URL? You will need to reconnect.')) return;
+    LS.rm('aca_db'); LS.clrSess();
+    location.reload();
+  }
+};
+
+// ════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════
+function doc(tag,cls){ const el=document.createElement(tag); el.className=cls; return el; }
+function str(n){ return String(n).padStart(2,'0'); }
+
+// Enter key on login PIN
+document.getElementById('ln-pin').addEventListener('keydown',e=>{ if(e.key==='Enter')App.login(); });
+
+// ════════════════════════════════════
+// BOOT
+// ════════════════════════════════════
+App.init();
+</script>
+</body>
+</html>
