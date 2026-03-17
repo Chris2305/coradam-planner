@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Coradam Planner</title>
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link rel="apple-touch-icon" href="favicon-192.png">
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -880,16 +882,21 @@ const App = {
             // Migrate pending profile to real UID
             profile={...pending,uid:u.uid,name:u.displayName||pending.name||email.split('@')[0],photo:u.photoURL||'',role:email===SUPER_ADMIN?'super_admin':'controller',pending:false,firstLogin:Date.now()};
             await fbSet(`users/${u.uid}`,profile);
-            await fbDel(`users/${pending.uid}`);
-            // Update client userIds that referenced the pending uid
-            for(const c of Cache.clientsArr()){
-              if((c.userIds||[]).includes(pending.uid)){
-                const updated={...c,userIds:c.userIds.map(id=>id===pending.uid?u.uid:id)};
-                await fbSet(`clients/${c.id}`,updated); Cache.clients[c.id]=updated;
-              }
-            }
-            delete Cache.users[pending.uid];
             Cache.users[u.uid]=profile;
+            // Clean up pending record and fix client assignments (best-effort — may fail if rules block it)
+            try{
+              await fbDel(`users/${pending.uid}`);
+              delete Cache.users[pending.uid];
+            } catch(e){ console.warn('Could not delete pending record (will be cleaned by admin):',e.message); }
+            // Update client userIds that referenced the pending uid (super_admin will handle if this fails)
+            try{
+              for(const c of Cache.clientsArr()){
+                if((c.userIds||[]).includes(pending.uid)){
+                  const updated={...c,userIds:c.userIds.map(id=>id===pending.uid?u.uid:id)};
+                  await fbSet(`clients/${c.id}`,updated); Cache.clients[c.id]=updated;
+                }
+              }
+            } catch(e){ console.warn('Could not update client assignments:',e.message); }
           } else {
             profile={uid:u.uid,name:u.displayName||email.split('@')[0],email,photo:u.photoURL||'',country:'',role:email===SUPER_ADMIN?'super_admin':'controller',active:true,firstLogin:Date.now()};
             await fbSet(`users/${u.uid}`,profile);
