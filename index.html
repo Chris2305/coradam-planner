@@ -460,6 +460,7 @@
   <div class="modal">
     <div class="mtitle" id="ms-title">Add Booking</div>
     <input type="hidden" id="ms-id">
+    <div class="fg" id="ms-for-row" style="display:none"><label class="lbl">Book for</label><select id="ms-for" class="sel" onchange="Slot.onControllerChange()"><option value="">Select controller…</option></select></div>
     <div class="fg"><label class="lbl">Date</label><input type="date" id="ms-date" class="inp"></div>
     <div class="fg">
       <label class="lbl">Time slot</label>
@@ -1000,16 +1001,35 @@ const Cal = {
 // SLOT (Booking)
 // ════════════════════════════════════
 const Slot = {
-  add(date){
+  _isAdmin(){ return App.user?.role==='super_admin'; },
+  _fillControllerDrop(selUid){
+    const row=document.getElementById('ms-for-row');
+    const sel=document.getElementById('ms-for');
+    if(!this._isAdmin()){ row.style.display='none'; return; }
+    row.style.display='';
+    const controllers=Cache.usersArr().filter(u=>u.role==='controller'&&u.active&&!u.pending).sort((a,b)=>a.name.localeCompare(b.name));
+    sel.innerHTML='<option value="">Select controller…</option>'+controllers.map(u=>`<option value="${u.uid}" ${u.uid===selUid?'selected':''}>${U.esc(u.name)}${u.country?' ('+u.country+')':''}</option>`).join('');
+    // After filling, update clients for selected controller
+    if(selUid) this._fillClients(selUid,'','');
+  },
+  onControllerChange(){
+    const uid=document.getElementById('ms-for').value;
+    this._fillClients(uid,'','');
+  },
+  add(date, forUid=null){
     this._reset();
     document.getElementById('ms-title').textContent='Add Booking';
     document.getElementById('ms-date').value=date||U.today();
     document.getElementById('ms-del').style.display='none';
-    this._fillClients(App.user.uid,'','');
+    const targetUid=forUid||(this._isAdmin()?'':App.user.uid);
+    this._fillControllerDrop(targetUid);
+    if(!this._isAdmin()) this._fillClients(App.user.uid,'','');
     M.open('m-slot');
   },
   edit(id){
     const e=Cache.entries[id]; if(!e) return;
+    // Only admin can edit others' bookings
+    if(!this._isAdmin() && e.userId!==App.user.uid) return;
     this._reset();
     document.getElementById('ms-title').textContent='Edit Booking';
     document.getElementById('ms-id').value=id;
@@ -1019,7 +1039,9 @@ const Slot = {
     document.getElementById('ms-fqty').value=e.finalQty!=null?e.finalQty:'';
     document.getElementById('ms-del').style.display='inline-flex';
     this.pick(e.slot);
-    this._fillClients(e.userId||App.user.uid, e.clientId||'', e.factory||'');
+    this._fillControllerDrop(e.userId);
+    if(!this._isAdmin()) this._fillClients(e.userId||App.user.uid, e.clientId||'', e.factory||'');
+    else this._fillClients(e.userId, e.clientId||'', e.factory||'');
     M.open('m-slot');
   },
   pick(type){
@@ -1065,17 +1087,22 @@ const Slot = {
     if(!type){err.textContent='Please select a time slot.';err.style.display='block';return;}
     if(!cid){err.textContent='Please select a client.';err.style.display='block';return;}
     if(!fac){err.textContent='Please select a factory.';err.style.display='block';return;}
-    const uid=App.user.uid, u=App.user, c=Cache.clients[cid];
-    const conflict=Cache.entriesArr().find(e=>e.id!==id&&e.userId===uid&&e.date===date&&e.slot===type);
-    if(conflict){err.textContent=`You already have a "${type}" on this date.`;err.style.display='block';return;}
+    // Determine target user (admin can book for any controller)
+    const targetUid=this._isAdmin()?(document.getElementById('ms-for').value||App.user.uid):App.user.uid;
+    if(this._isAdmin()&&!document.getElementById('ms-for').value){err.textContent='Please select a controller.';err.style.display='block';return;}
+    const targetUser=Cache.users[targetUid]||App.user;
+    const c=Cache.clients[cid];
+    const conflict=Cache.entriesArr().find(e=>e.id!==id&&e.userId===targetUid&&e.date===date&&e.slot===type);
+    if(conflict){err.textContent=`${targetUser.name} already has a "${type}" on this date.`;err.style.display='block';return;}
     Spin.on();
     try{
       const eid=id||U.uuid();
       const base=id?{...Cache.entries[id]}:{};
-      const entry={...base,id:eid,userId:uid,userName:u.name,userEmail:u.email,userCountry:u.country||'',date,slot:type,clientId:cid,clientName:c?.name||'',factory:fac,expectedQty:eqty,finalQty:fqty,notes,updated:Date.now(),created:base.created||Date.now()};
+      const entry={...base,id:eid,userId:targetUid,userName:targetUser.name,userEmail:targetUser.email,userCountry:targetUser.country||'',date,slot:type,clientId:cid,clientName:c?.name||'',factory:fac,expectedQty:eqty,finalQty:fqty,notes,updated:Date.now(),created:base.created||Date.now()};
       await fbSet(`entries/${eid}`,entry);
       Cache.entries[eid]=entry;
-      M.close('m-slot'); Cal.render();
+      M.close('m-slot');
+      if(this._isAdmin()){ Adm.refresh(); } else { Cal.render(); }
       toast(id?'Booking updated.':'Booking saved.');
     } catch(e){ toast('Save failed: '+e.message,'err'); }
     finally{ Spin.off(); }
@@ -1087,7 +1114,8 @@ const Slot = {
     try{
       await fbDel(`entries/${id}`);
       delete Cache.entries[id];
-      M.close('m-slot'); Cal.render();
+      M.close('m-slot');
+      if(this._isAdmin()){ Adm.refresh(); } else { Cal.render(); }
       toast('Booking deleted.');
     } catch(e){ toast('Delete failed.','err'); }
     finally{ Spin.off(); }
@@ -1381,11 +1409,12 @@ const Adm = {
         de.forEach(e=>{
           const dc=U.dotCls(e.slot);
           const tip=`${U.esc(u.name)}: ${U.esc(e.slot)} – ${U.esc(e.clientName||'')} @ ${U.esc(e.factory||'')}${e.expectedQty!=null?' | Exp: '+e.expectedQty:''}${e.finalQty!=null?' | Final: '+e.finalQty:''}`;
-          dots+=`<div class="tl-dot ${dc}" data-tip="${tip.replace(/"/g,'&quot;')}"></div>`;
+          dots+=`<div class="tl-dot ${dc}" data-tip="${tip.replace(/"/g,'&quot;')}" data-eid="${e.id}" style="cursor:pointer"></div>`;
         });
         if(hasAv&&!hasUn) dots+=`<div class="av-dot av-y" title="Available"></div>`;
         if(hasUn) dots+=`<div class="av-dot av-n" title="Unavailable"></div>`;
-        body+=`<td class="${isT?'tc-td':isW?'wknd-col':''}"><div class="tl-cell">${dots}</div></td>`;
+        const cellClick=de.length===0?`onclick="Slot.add('${ds}','${u.uid}')" title="Add booking for ${U.esc(u.name)}" style="cursor:pointer"`:``;
+        body+=`<td class="${isT?'tc-td':isW?'wknd-col':''}"><div class="tl-cell" ${cellClick}>${dots}</div></td>`;
       }
       body+='</tr>';
     });
@@ -1397,6 +1426,7 @@ const Adm = {
       dot.addEventListener('mouseenter',e=>{ tip.textContent=e.target.dataset.tip||''; tip.style.display='block'; });
       dot.addEventListener('mousemove',e=>{ tip.style.left=(e.clientX+12)+'px'; tip.style.top=(e.clientY-10)+'px'; });
       dot.addEventListener('mouseleave',()=>{ tip.style.display='none'; });
+      dot.addEventListener('click',e=>{ e.stopPropagation(); tip.style.display='none'; Slot.edit(e.target.dataset.eid); });
     });
   },
 
@@ -1406,7 +1436,7 @@ const Adm = {
     const sorted=[...f].sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
     let html='<div style="overflow-x:auto"><table class="ltab"><thead><tr><th>Date</th><th>Controller</th><th>Country</th><th>Slot</th><th>Client</th><th>Factory</th><th>Exp. Qty</th><th>Final Qty</th><th>Notes</th></tr></thead><tbody>';
     sorted.forEach(e=>{
-      html+=`<tr><td><strong>${U.fmt(e.date)}</strong></td><td>${U.flag(e.userCountry)} ${U.esc(e.userName)}</td><td>${U.esc(e.userCountry)}</td><td><span class="badge ${U.badgeCls(e.slot)}">${U.esc(e.slot)}</span></td><td>${U.esc(e.clientName)}</td><td>${U.esc(e.factory)}</td><td style="text-align:right">${e.expectedQty!=null?e.expectedQty:'<span style="color:var(--txs)">—</span>'}</td><td style="text-align:right">${e.finalQty!=null?e.finalQty:'<span style="color:var(--txs)">—</span>'}</td><td style="color:var(--txs);font-size:.76rem">${U.esc(e.notes)}</td></tr>`;
+      html+=`<tr style="cursor:pointer" onclick="Slot.edit('${e.id}')" title="Click to edit"><td><strong>${U.fmt(e.date)}</strong></td><td>${U.flag(e.userCountry)} ${U.esc(e.userName)}</td><td>${U.esc(e.userCountry)}</td><td><span class="badge ${U.badgeCls(e.slot)}">${U.esc(e.slot)}</span></td><td>${U.esc(e.clientName)}</td><td>${U.esc(e.factory)}</td><td style="text-align:right">${e.expectedQty!=null?e.expectedQty:'<span style="color:var(--txs)">—</span>'}</td><td style="text-align:right">${e.finalQty!=null?e.finalQty:'<span style="color:var(--txs)">—</span>'}</td><td style="color:var(--txs);font-size:.76rem">${U.esc(e.notes)}</td></tr>`;
     });
     html+='</tbody></table></div>';
     document.getElementById('ls-content').innerHTML=html;
@@ -1446,7 +1476,7 @@ const Sett = {
     document.getElementById('u-tbody').innerHTML=users.map(u=>{
       const uClients=Cache.clientsArr().filter(c=>(c.userIds||[]).includes(u.uid)).map(c=>U.esc(c.name)).join(', ')||'<span style="color:var(--txs)">none</span>';
       const statusBadge=u.pending?'<span class="badge" style="background:#f59e0b;color:#fff">Pending</span>':`<span class="badge ${u.active?'b-on':'b-off'}">${u.active?'Active':'Inactive'}</span>`;
-      return `<tr><td><strong>${U.esc(u.name||u.email.split('@')[0])}</strong></td><td style="font-size:.76rem">${U.esc(u.email)}</td><td>${u.country?U.flag(u.country)+' '+U.esc(u.country):'<span style="color:var(--txs)">—</span>'}</td><td style="font-size:.76rem">${uClients}</td><td>${statusBadge}</td><td><button class="btn btn-s btn-sm" onclick="Sett.editUser('${u.uid}')">Edit</button></td></tr>`;
+      return `<tr><td><strong>${U.esc(u.name||u.email.split('@')[0])}</strong></td><td style="font-size:.76rem">${U.esc(u.email)}</td><td>${u.country?U.flag(u.country)+' '+U.esc(u.country):'<span style="color:var(--txs)">—</span>'}</td><td style="font-size:.76rem">${uClients}</td><td>${statusBadge}</td><td style="white-space:nowrap"><button class="btn btn-s btn-sm" onclick="Sett.editUser('${u.uid}')">Edit</button> <button class="btn btn-d btn-sm" onclick="Sett.deleteUser('${u.uid}')">Delete</button></td></tr>`;
     }).join('');
   },
 
@@ -1511,6 +1541,33 @@ const Sett = {
       }
       M.close('m-user'); this._renderUsers(); toast('Controller updated.');
     } catch(e){ console.error('saveUser error',e); err.textContent='Save failed: '+(e?.message||e); err.style.display='block'; }
+    finally{ Spin.off(); }
+  },
+
+  async deleteUser(uid){
+    const u=Cache.users[uid]; if(!u) return;
+    if(!confirm(`Delete ${u.name||u.email}? This will also remove all their bookings and availability rules.`)) return;
+    Spin.on();
+    try{
+      // Remove from client assignments
+      for(const c of Cache.clientsArr()){
+        if((c.userIds||[]).includes(uid)){
+          const updated={...c,userIds:c.userIds.filter(id=>id!==uid)};
+          await fbSet(`clients/${c.id}`,updated); Cache.clients[c.id]=updated;
+        }
+      }
+      // Delete entries
+      for(const e of Cache.entriesArr().filter(e=>e.userId===uid)){
+        await fbDel(`entries/${e.id}`); delete Cache.entries[e.id];
+      }
+      // Delete availability rules
+      for(const a of Cache.availArr().filter(a=>a.userId===uid)){
+        await fbDel(`availability/${a.id}`); delete Cache.avail[a.id];
+      }
+      // Delete user profile
+      await fbDel(`users/${uid}`); delete Cache.users[uid];
+      this._renderUsers(); toast('Controller deleted.');
+    } catch(e){ toast('Delete failed: '+(e?.message||e),'err'); }
     finally{ Spin.off(); }
   },
 
