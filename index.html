@@ -9,7 +9,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <style>
     :root{
-      --p:#1d4ed8;--pd:#1e3a8a;--pl:#3b82f6;
+      --p:#191d64;--pd:#12154a;--pl:#2d3299;
       --bg:#f1f5f9;--card:#fff;--bdr:#e2e8f0;
       --tx:#1e293b;--txs:#64748b;
       --full:#3b82f6;--am:#10b981;--pm:#f59e0b;
@@ -27,6 +27,7 @@
     /* Header */
     .hdr{background:var(--p);color:#fff;padding:0 1.25rem;height:54px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:var(--shm)}
     .hdr-l{font-size:.95rem;font-weight:700;display:flex;align-items:center;gap:.4rem}
+    .hdr-logo{height:32px;width:auto;object-fit:contain;filter:brightness(0) invert(1)}
     .hdr-r{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap}
     .hdr-avatar{width:28px;height:28px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,.4)}
     .hdr-name{font-size:.78rem;opacity:.85}
@@ -56,7 +57,7 @@
     /* Slot toggle */
     .slot-btns{display:flex;gap:.45rem}
     .slt-btn{flex:1;padding:.5rem;border:2px solid var(--bdr);border-radius:var(--r);background:#fff;cursor:pointer;font-size:.75rem;font-weight:700;text-align:center;transition:all .14s;color:var(--txs)}
-    .slt-btn.on-full{border-color:var(--full);background:#eff6ff;color:var(--full)}
+    .slt-btn.on-full{border-color:var(--full);background:#eef0fb;color:var(--full)}
     .slt-btn.on-am{border-color:var(--am);background:#ecfdf5;color:#065f46}
     .slt-btn.on-pm{border-color:var(--pm);background:#fffbeb;color:#92400e}
 
@@ -80,7 +81,7 @@
     .cal-hdr{text-align:center;font-size:.68rem;font-weight:800;color:var(--txs);padding:.38rem 0;text-transform:uppercase;letter-spacing:.04em}
     .cal-day{min-height:82px;border:1px solid var(--bdr);border-radius:6px;background:#fff;padding:.32rem;cursor:pointer;transition:border-color .13s,box-shadow .13s;position:relative}
     .cal-day:hover{border-color:var(--pl);box-shadow:0 0 0 2px rgba(59,130,246,.14)}
-    .cal-day.is-today{border-color:var(--p);background:#eff6ff}
+    .cal-day.is-today{border-color:var(--p);background:#eef0fb}
     .cal-day.is-avail{background:#f0fdf4}
     .cal-day.is-unavail{background:#fef2f2}
     .cal-day.oth{opacity:.28;cursor:default;background:#f8fafc}
@@ -89,7 +90,7 @@
     .is-today .dn{color:var(--p)}
     .dslots{display:flex;flex-direction:column;gap:2px}
     .chip{border-radius:3px;padding:1px 4px;font-size:.64rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
-    .c-full{background:#dbeafe;color:#1d4ed8}.c-am{background:#d1fae5;color:#065f46}.c-pm{background:#fef3c7;color:#92400e}
+    .c-full{background:#e8eaf6;color:#191d64}.c-am{background:#d1fae5;color:#065f46}.c-pm{background:#fef3c7;color:#92400e}
     .av-tag{font-size:.6rem;font-weight:800;padding:1px 4px;border-radius:3px;margin-top:1px}
     .av-tag-yes{background:#dcfce7;color:#166534}.av-tag-no{background:#fee2e2;color:#991b1b}
 
@@ -132,7 +133,7 @@
     .d-f{background:var(--full)}.d-a{background:var(--am)}.d-p{background:var(--pm)}
     .av-dot{width:8px;height:8px;border-radius:50%;margin-top:1px}
     .av-y{background:var(--avail)}.av-n{background:var(--unavail)}
-    .tc-td{background:#eff6ff!important}
+    .tc-td{background:#eef0fb!important}
     .tl th.tc-td{color:var(--p)}
     .wknd-col{background:#fafafa}
 
@@ -145,8 +146,8 @@
 
     /* Badges */
     .badge{display:inline-flex;align-items:center;padding:.16rem .52rem;border-radius:999px;font-size:.68rem;font-weight:700}
-    .b-f{background:#dbeafe;color:#1d4ed8}.b-a{background:#d1fae5;color:#065f46}.b-p{background:#fef3c7;color:#92400e}
-    .b-adm{background:#fce7f3;color:#9d174d}.b-ctrl{background:#e0f2fe;color:#0369a1}
+    .b-f{background:#e8eaf6;color:#191d64}.b-a{background:#d1fae5;color:#065f46}.b-p{background:#fef3c7;color:#92400e}
+    .b-adm{background:#fce7f3;color:#9d174d}.b-ctrl{background:#e8eaf6;color:#191d64}
     .b-on{background:#dcfce7;color:#166534}.b-off{background:#fee2e2;color:#991b1b}
 
     /* Modal */
@@ -172,7 +173,7 @@
     .utab tr:last-child td{border-bottom:none}
 
     /* Setup/Login */
-    .center-bg{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem;background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 55%,#1d4ed8 100%)}
+    .center-bg{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem;background:linear-gradient(135deg,#0a0b1e 0%,#191d64 60%,#2d3299 100%)}
     .center-card{background:#fff;border-radius:14px;padding:2.2rem;width:100%;max-width:480px;box-shadow:0 24px 64px rgba(0,0,0,.32)}
     .card-ico{text-align:center;font-size:2rem;margin-bottom:.5rem}
     .card-h{font-size:1.3rem;font-weight:800;margin-bottom:.25rem}
@@ -233,8 +234,8 @@
 <div id="s-setup" class="screen active">
   <div class="center-bg">
     <div class="center-card" style="max-width:540px">
-      <div class="card-ico">📋</div>
-      <div class="card-h">Coradam Planner — Setup</div>
+      <img src="coradam-logo.png" alt="Coradam" style="height:48px;width:auto;margin:0 auto 1rem;display:block;filter:invert(1)">
+      <div class="card-h">Planner — Setup</div>
       <p class="card-sub">Connect your Firebase project to enable Google sign-in and real-time sync for your team.</p>
 
       <div style="background:#f8fafc;border:1px solid var(--bdr);border-radius:var(--r);padding:1rem;margin-bottom:1.1rem;font-size:.8rem">
@@ -264,8 +265,7 @@
 <div id="s-login" class="screen">
   <div class="center-bg">
     <div class="center-card" style="max-width:360px;text-align:center">
-      <div class="card-ico">📋</div>
-      <div class="card-h">Coradam Planner</div>
+      <img src="coradam-logo.png" alt="Coradam" style="height:52px;width:auto;margin:0 auto 1rem;display:block;filter:invert(1)">
       <p class="card-sub">Sign in with your Coradam Google account to continue.</p>
       <button class="btn-google" onclick="Auth.signIn()">
         <svg class="g-logo" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
@@ -284,7 +284,7 @@
 ══════════════════════════════ -->
 <div id="s-cal" class="screen">
   <header class="hdr">
-    <div class="hdr-l">📋 <span id="hdr-cal-name"></span></div>
+    <div class="hdr-l"><img src="coradam-logo.png" class="hdr-logo" alt="Coradam"> <span id="hdr-cal-name" style="opacity:.7;font-weight:400;font-size:.82rem"></span></div>
     <div class="hdr-r">
       <button class="btn btn-avail btn-sm" onclick="Avail.openBulk()">🗓 Set Availability</button>
       <img id="hdr-avatar" class="hdr-avatar" src="" alt="" style="display:none">
@@ -322,7 +322,7 @@
 ══════════════════════════════ -->
 <div id="s-adm" class="screen">
   <header class="hdr">
-    <div class="hdr-l">📊 <span style="opacity:.7;font-weight:400;font-size:.85rem">Coradam Planner</span></div>
+    <div class="hdr-l"><img src="coradam-logo.png" class="hdr-logo" alt="Coradam"></div>
     <div class="hdr-r">
       <div class="ntabs">
         <div class="ntab on" id="nt-tl" onclick="Adm.setView('tl')">Timeline</div>
@@ -387,7 +387,7 @@
 ══════════════════════════════ -->
 <div id="s-set" class="screen">
   <header class="hdr">
-    <div class="hdr-l">⚙ Settings</div>
+    <div class="hdr-l"><img src="coradam-logo.png" class="hdr-logo" alt="Coradam"> <span style="opacity:.7;font-weight:400;font-size:.82rem">Settings</span></div>
     <div class="hdr-r">
       <button class="btn btn-g btn-sm" id="hdr-set-back" onclick="App.goBack()">← Back</button>
       <button class="btn btn-g btn-sm" onclick="Auth.signOut()">Sign out</button>
