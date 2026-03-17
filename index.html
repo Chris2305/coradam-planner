@@ -72,6 +72,31 @@
     .cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:.9rem;gap:.5rem}
     .cal-lbl{font-size:1.1rem;font-weight:800;text-align:center}
     .legend{display:flex;gap:.8rem;flex-wrap:wrap;margin-top:.3rem;justify-content:center}
+    .vt-btns{display:flex;gap:.3rem;justify-content:center;margin:.35rem 0}
+    .vt-btn{padding:.22rem .8rem;border-radius:999px;border:1.5px solid var(--bdr);background:#fff;font-size:.72rem;font-weight:700;cursor:pointer;color:var(--txs);transition:all .14s}
+    .vt-btn.on{background:var(--p);color:#fff;border-color:var(--p)}
+    /* Week view */
+    .week-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:.4rem;padding:.75rem}
+    .week-day{border:1px solid var(--bdr);border-radius:8px;background:#fff;min-height:140px;overflow:hidden}
+    .week-day.is-today{border-color:var(--p);background:#eef0fb}
+    .week-day.is-avail{background:#f0fdf4}
+    .week-day.is-unavail{background:#fef2f2}
+    .week-day-hdr{background:#f8fafc;padding:.3rem .5rem;font-size:.72rem;font-weight:800;border-bottom:1px solid var(--bdr);display:flex;justify-content:space-between;align-items:center;cursor:pointer}
+    .week-day-hdr:hover{background:#f1f5f9}
+    .week-day-hdr .wdn{color:var(--txs)}
+    .week-day-hdr .wdd{font-size:.9rem;color:var(--tx)}
+    .week-day-body{padding:.3rem}
+    /* List view */
+    .cal-list-wrap{padding:.75rem}
+    .cl-empty{text-align:center;padding:3rem 1rem;color:var(--txs)}
+    .cl-month{font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--txs);padding:.5rem .2rem .2rem;margin-top:.5rem}
+    .cl-row{display:flex;gap:.7rem;align-items:flex-start;padding:.6rem .5rem;border-bottom:1px solid var(--bdr);cursor:pointer;border-radius:6px;transition:background .12s}
+    .cl-row:hover{background:#f8fafc}
+    .cl-date{min-width:52px;font-size:.78rem;font-weight:700;color:var(--tx)}
+    .cl-date-sub{font-size:.65rem;color:var(--txs);font-weight:400}
+    .cl-info{flex:1;font-size:.82rem}
+    .cl-client{font-weight:700}
+    .cl-detail{color:var(--txs);font-size:.75rem;margin-top:.1rem}
     .leg-i{display:flex;align-items:center;gap:.28rem;font-size:.68rem;color:var(--txs)}
     .leg-d{width:10px;height:10px;border-radius:2px}
     .ld-f{background:var(--full)}.ld-a{background:var(--am)}.ld-p{background:var(--pm)}
@@ -298,7 +323,12 @@
       <button class="btn btn-s btn-sm" onclick="Cal.prev()">← Prev</button>
       <div style="text-align:center">
         <div class="cal-lbl" id="cal-lbl"></div>
-        <div class="legend">
+        <div class="vt-btns">
+          <button class="vt-btn on" id="vt-month" onclick="Cal.setView('month')">Month</button>
+          <button class="vt-btn" id="vt-week" onclick="Cal.setView('week')">Week</button>
+          <button class="vt-btn" id="vt-list" onclick="Cal.setView('list')">List</button>
+        </div>
+        <div class="legend" id="cal-legend">
           <div class="leg-i"><div class="leg-d ld-f"></div>Full Day</div>
           <div class="leg-i"><div class="leg-d ld-a"></div>Half AM</div>
           <div class="leg-i"><div class="leg-d ld-p"></div>Half PM</div>
@@ -313,6 +343,8 @@
       <div class="cal-hdr">Thu</div><div class="cal-hdr">Fri</div><div class="cal-hdr">Sat</div>
       <div class="cal-hdr">Sun</div>
     </div>
+    <div id="cal-week" style="display:none"></div>
+    <div id="cal-list" style="display:none"></div>
   </div>
 </div>
 
@@ -326,6 +358,7 @@
     <div class="hdr-r">
       <div class="ntabs">
         <div class="ntab on" id="nt-tl" onclick="Adm.setView('tl')">Timeline</div>
+        <div class="ntab" id="nt-wk" onclick="Adm.setView('wk')">Week</div>
         <div class="ntab" id="nt-ls" onclick="Adm.setView('ls')">List</div>
       </div>
       <button class="btn btn-g btn-sm" onclick="Adm.refresh()">↻</button>
@@ -377,6 +410,7 @@
         <div class="leg-i"><div style="width:8px;height:8px;border-radius:50%;background:var(--unavail)"></div>Unavailable</div>
       </div>
     </div>
+    <div id="vw-wk" style="display:none"><div id="wk-content"></div></div>
     <div id="vw-ls" style="display:none"><div id="ls-content"></div></div>
   </div>
 </div>
@@ -814,7 +848,7 @@ const App = {
   _pendingDate: null,
 
   async init(){
-    const cfg=LS.getCfg();
+    const cfg=LS.getCfg()||{apiKey:"AIzaSyCK67ERv8OmlY7p12iDhncVXA03Ga1ai7Y",authDomain:"coradam-planner.firebaseapp.com",databaseURL:"https://coradam-planner-default-rtdb.europe-west1.firebasedatabase.app",projectId:"coradam-planner",storageBucket:"coradam-planner.firebasestorage.app",messagingSenderId:"1030102827382",appId:"1:1030102827382:web:f67d0a6783865d9a66ba57",measurementId:"G-RXDVDSZ7P1"};
     if(!cfg){ show('setup'); return; }
     // Init Firebase
     fapp=firebase.initializeApp(cfg);
@@ -927,11 +961,39 @@ const App = {
 // ════════════════════════════════════
 const Cal = {
   cur: new Date(),
+  view: 'month', // 'month' | 'week' | 'list'
+
   init(){ this.cur=new Date(); this.render(); },
-  prev(){ this.cur=new Date(this.cur.getFullYear(),this.cur.getMonth()-1,1); this.render(); },
-  next(){ this.cur=new Date(this.cur.getFullYear(),this.cur.getMonth()+1,1); this.render(); },
+
+  setView(v){
+    this.view=v;
+    ['month','week','list'].forEach(n=>document.getElementById('vt-'+n).classList.toggle('on',n===v));
+    this.render();
+  },
+
+  prev(){
+    if(this.view==='week'){ this.cur=new Date(this.cur); this.cur.setDate(this.cur.getDate()-7); }
+    else if(this.view==='list'){ this.cur=new Date(this.cur.getFullYear(),this.cur.getMonth()-1,1); }
+    else { this.cur=new Date(this.cur.getFullYear(),this.cur.getMonth()-1,1); }
+    this.render();
+  },
+  next(){
+    if(this.view==='week'){ this.cur=new Date(this.cur); this.cur.setDate(this.cur.getDate()+7); }
+    else if(this.view==='list'){ this.cur=new Date(this.cur.getFullYear(),this.cur.getMonth()+1,1); }
+    else { this.cur=new Date(this.cur.getFullYear(),this.cur.getMonth()+1,1); }
+    this.render();
+  },
 
   render(){
+    document.getElementById('cal-grid').style.display=this.view==='month'?'':'none';
+    document.getElementById('cal-week').style.display=this.view==='week'?'':'none';
+    document.getElementById('cal-list').style.display=this.view==='list'?'':'none';
+    if(this.view==='month') this._renderMonth();
+    else if(this.view==='week') this._renderWeek();
+    else this._renderList();
+  },
+
+  _renderMonth(){
     const y=this.cur.getFullYear(), m=this.cur.getMonth(), today=U.today(), uid=App.user.uid;
     document.getElementById('cal-lbl').textContent=U.monthLabel(this.cur);
 
@@ -985,7 +1047,6 @@ const Cal = {
 
   _dayClick(ds, de, avRules){
     if(de.length===0 && avRules.length===0){
-      // Empty day: show options
       App._pendingDate=ds;
       document.getElementById('m-day-title').textContent=U.fmt(ds);
       M.open('m-day');
@@ -994,6 +1055,79 @@ const Cal = {
     } else {
       Avail.openForDate(ds, avRules[0]);
     }
+  },
+
+  _renderWeek(){
+    const uid=App.user.uid, today=U.today();
+    // Find Monday of current week
+    const d=new Date(this.cur);
+    const dow=d.getDay()===0?6:d.getDay()-1; // 0=Mon
+    d.setDate(d.getDate()-dow);
+    const monday=new Date(d);
+    const days=[];
+    for(let i=0;i<7;i++){
+      const dd=new Date(monday); dd.setDate(monday.getDate()+i); days.push(dd);
+    }
+    const startLabel=days[0].toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+    const endLabel=days[6].toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+    document.getElementById('cal-lbl').textContent=`${startLabel} – ${endLabel}`;
+
+    const entries=Cache.entriesArr().filter(e=>e.userId===uid);
+    const eMap={}; entries.forEach(e=>{ (eMap[e.date]=eMap[e.date]||[]).push(e); });
+    const aMap={};
+    const allYM=new Set(days.map(d=>[d.getFullYear(),d.getMonth()]));
+    allYM.forEach(([y,m])=>{ Cache.availForUser(uid).forEach(rule=>{ U.expandAvail(rule,y,m).forEach(date=>{ (aMap[date]=aMap[date]||[]).push(rule); }); }); });
+    // Fix: iterate unique y,m pairs
+    const ymSeen=new Set();
+    days.forEach(d=>{
+      const key=`${d.getFullYear()}-${d.getMonth()}`;
+      if(!ymSeen.has(key)){ ymSeen.add(key); Cache.availForUser(uid).forEach(rule=>{ U.expandAvail(rule,d.getFullYear(),d.getMonth()).forEach(date=>{ (aMap[date]=aMap[date]||[]).push(rule); }); }); }
+    });
+
+    const WDAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    let html='<div class="week-grid">';
+    days.forEach((d,i)=>{
+      const ds=d.toISOString().slice(0,10);
+      const isT=ds===today;
+      const de=eMap[ds]||[];
+      const avRules=aMap[ds]||[];
+      const hasAvail=avRules.some(r=>r.type==='available');
+      const hasUnavail=avRules.some(r=>r.type==='unavailable');
+      let cls='week-day';
+      if(isT) cls+=' is-today';
+      else if(hasUnavail) cls+=' is-unavail';
+      else if(hasAvail) cls+=' is-avail';
+      let chips='';
+      de.forEach(e=>{ chips+=`<div class="chip ${U.chipCls(e.slot)}" onclick="Slot.edit('${e.id}')" style="margin-bottom:.2rem">${U.esc(e.clientName||e.slot)}<div style="font-size:.62rem;opacity:.7">${U.esc(e.factory||'')}</div></div>`; });
+      if(hasAvail&&!hasUnavail) chips+=`<div class="av-tag av-tag-yes" style="font-size:.65rem">✓ Avail</div>`;
+      if(hasUnavail) chips+=`<div class="av-tag av-tag-no" style="font-size:.65rem">✗ Unavail</div>`;
+      html+=`<div class="${cls}"><div class="week-day-hdr" onclick="(function(){const ds='${ds}',de=${JSON.stringify(de.map(e=>e.id))},av=${JSON.stringify(avRules.length>0)};if(de.length>0)Slot.edit(de[0]);else if(av)Avail.openForDate('${ds}');else{App._pendingDate='${ds}';document.getElementById('m-day-title').textContent='${U.fmt(ds)}';M.open('m-day');}})()"><span class="wdn">${WDAYS[i]}</span><span class="wdd">${d.getDate()}</span></div><div class="week-day-body">${chips||'<span style="color:var(--txs);font-size:.7rem">Free</span>'}</div></div>`;
+    });
+    html+='</div>';
+    document.getElementById('cal-week').innerHTML=html;
+  },
+
+  _renderList(){
+    const uid=App.user.uid;
+    // Show all entries sorted by date
+    const entries=Cache.entriesArr().filter(e=>e.userId===uid).sort((a,b)=>a.date<b.date?-1:1);
+    document.getElementById('cal-lbl').textContent='All Bookings';
+    if(!entries.length){
+      document.getElementById('cal-list').innerHTML='<div class="cal-list-wrap"><div class="cl-empty">📭 No bookings yet.<br><span style="font-size:.8rem">Click a day on the Month or Week view to add one.</span></div></div>';
+      return;
+    }
+    let html='<div class="cal-list-wrap">', lastMonth='';
+    entries.forEach(e=>{
+      const mLabel=new Date(e.date+'T00:00').toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+      if(mLabel!==lastMonth){ html+=`<div class="cl-month">${mLabel}</div>`; lastMonth=mLabel; }
+      const dow=new Date(e.date+'T00:00').toLocaleDateString('en-GB',{weekday:'short'});
+      const day=new Date(e.date+'T00:00').getDate();
+      const slotBadge=`<span class="badge ${U.badgeCls(e.slot)}" style="font-size:.65rem">${e.slot}</span>`;
+      const qty=e.expectedQty!=null||e.finalQty!=null?`<span style="margin-left:.4rem;color:var(--txs)">Exp: ${e.expectedQty??'—'} / Final: ${e.finalQty??'—'}</span>`:'';
+      html+=`<div class="cl-row" onclick="Slot.edit('${e.id}')"><div class="cl-date"><div>${day}</div><div class="cl-date-sub">${dow}</div></div><div class="cl-info"><div class="cl-client">${U.esc(e.clientName||'—')} ${slotBadge}</div><div class="cl-detail">${U.esc(e.factory||'')}${qty}${e.notes?` · ${U.esc(e.notes)}`:''}</div></div></div>`;
+    });
+    html+='</div>';
+    document.getElementById('cal-list').innerHTML=html;
   }
 };
 
@@ -1007,7 +1141,7 @@ const Slot = {
     const sel=document.getElementById('ms-for');
     if(!this._isAdmin()){ row.style.display='none'; return; }
     row.style.display='';
-    const controllers=Cache.usersArr().filter(u=>u.role==='controller'&&u.active&&!u.pending).sort((a,b)=>a.name.localeCompare(b.name));
+    const controllers=Cache.usersArr().filter(u=>u.role==='controller'&&u.active).sort((a,b)=>a.name.localeCompare(b.name));
     sel.innerHTML='<option value="">Select controller…</option>'+controllers.map(u=>`<option value="${u.uid}" ${u.uid===selUid?'selected':''}>${U.esc(u.name)}${u.country?' ('+u.country+')':''}</option>`).join('');
     // After filling, update clients for selected controller
     if(selUid) this._fillClients(selUid,'','');
@@ -1287,14 +1421,20 @@ const Adm = {
   setView(v){
     this.view=v;
     document.getElementById('vw-tl').style.display=v==='tl'?'block':'none';
+    document.getElementById('vw-wk').style.display=v==='wk'?'block':'none';
     document.getElementById('vw-ls').style.display=v==='ls'?'block':'none';
-    document.getElementById('nt-tl').className='ntab'+(v==='tl'?' on':'');
-    document.getElementById('nt-ls').className='ntab'+(v==='ls'?' on':'');
+    ['tl','wk','ls'].forEach(id=>document.getElementById('nt-'+id).className='ntab'+(v===id?' on':''));
     this._render();
   },
 
-  prev(){ this.cur=new Date(this.cur.getFullYear(),this.cur.getMonth()-1,1); document.getElementById('f-mo').value=U.monthKey(this.cur); this.applyFilters(); },
-  next(){ this.cur=new Date(this.cur.getFullYear(),this.cur.getMonth()+1,1); document.getElementById('f-mo').value=U.monthKey(this.cur); this.applyFilters(); },
+  prev(){
+    if(this.view==='wk'){ this.cur=new Date(this.cur); this.cur.setDate(this.cur.getDate()-7); this._render(); return; }
+    this.cur=new Date(this.cur.getFullYear(),this.cur.getMonth()-1,1); document.getElementById('f-mo').value=U.monthKey(this.cur); this.applyFilters();
+  },
+  next(){
+    if(this.view==='wk'){ this.cur=new Date(this.cur); this.cur.setDate(this.cur.getDate()+7); this._render(); return; }
+    this.cur=new Date(this.cur.getFullYear(),this.cur.getMonth()+1,1); document.getElementById('f-mo').value=U.monthKey(this.cur); this.applyFilters();
+  },
 
   _fillFilterOpts(){
     const all=Cache.entriesArr();
@@ -1352,7 +1492,7 @@ const Adm = {
       `<div class="stat"><div class="sv">${finT||'—'}</div><div class="sl">Final qty total</div></div>`;
   },
 
-  _render(){ if(this.view==='tl') this._renderTl(); else this._renderList(); },
+  _render(){ if(this.view==='tl') this._renderTl(); else if(this.view==='wk') this._renderWk(); else this._renderList(); },
 
   _renderTl(){
     const y=this.cur.getFullYear(), m=this.cur.getMonth();
@@ -1427,6 +1567,50 @@ const Adm = {
       dot.addEventListener('mousemove',e=>{ tip.style.left=(e.clientX+12)+'px'; tip.style.top=(e.clientY-10)+'px'; });
       dot.addEventListener('mouseleave',()=>{ tip.style.display='none'; });
       dot.addEventListener('click',e=>{ e.stopPropagation(); tip.style.display='none'; Slot.edit(e.target.dataset.eid); });
+    });
+  },
+
+  _renderWk(){
+    const today=U.today();
+    // Monday of cur week
+    const base=new Date(this.cur);
+    const dow=base.getDay()===0?6:base.getDay()-1;
+    base.setDate(base.getDate()-dow);
+    const days=[]; for(let i=0;i<7;i++){ const d=new Date(base); d.setDate(base.getDate()+i); days.push(d); }
+    const startLabel=days[0].toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+    const endLabel=days[6].toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+    document.getElementById('adm-lbl').textContent=`${startLabel} – ${endLabel}`;
+    // All active controllers
+    const allUsers=Cache.usersArr().filter(u=>u.role==='controller'&&u.active&&(!this.country||u.country===this.country));
+    allUsers.sort((a,b)=>(a.country||'').localeCompare(b.country||'')||a.name.localeCompare(b.name));
+    const WDAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    // Build entry map
+    const eMap={};
+    Cache.entriesArr().forEach(e=>{ const k=e.userId+'|'+e.date; (eMap[k]=eMap[k]||[]).push(e); });
+    if(!allUsers.length){ document.getElementById('wk-content').innerHTML='<div style="padding:2rem;text-align:center;color:var(--txs)">No controllers for this filter.</div>'; return; }
+    let html='<div style="overflow-x:auto"><table class="tl" style="min-width:700px"><thead><tr><th style="text-align:left;padding:.4rem .6rem;min-width:110px">Controller</th>';
+    days.forEach((d,i)=>{ const ds=d.toISOString().slice(0,10); const isT=ds===today,isW=d.getDay()===0||d.getDay()===6; html+=`<th class="${isT?'tc-td':isW?'wknd-col':''}">${WDAYS[i]}<br>${d.getDate()}</th>`; });
+    html+='</tr></thead><tbody>';
+    let lastCountry='';
+    allUsers.forEach(u=>{
+      if(u.country!==lastCountry&&u.country){ lastCountry=u.country; html+=`<tr style="background:#f1f5f9"><td colspan="8" style="padding:.3rem .6rem;font-size:.7rem;font-weight:800;color:var(--txs);text-transform:uppercase">${U.flag(u.country)} ${U.esc(u.country)}</td></tr>`; }
+      html+=`<tr><td style="padding:.4rem .6rem"><div class="tl-un">${U.esc(u.name)}</div></td>`;
+      days.forEach(d=>{
+        const ds=d.toISOString().slice(0,10);
+        const isT=ds===today, isW=d.getDay()===0||d.getDay()===6;
+        const de=eMap[u.uid+'|'+ds]||[];
+        let cells='';
+        de.forEach(e=>{ cells+=`<div class="tl-dot ${U.dotCls(e.slot)}" data-eid="${e.id}" style="cursor:pointer" title="${U.esc(e.slot+' – '+(e.clientName||'')+(e.factory?' @ '+e.factory:''))}"></div>`; });
+        const click=de.length===0?`onclick="Slot.add('${ds}','${u.uid}')" style="cursor:pointer" title="Add booking"`:'' ;
+        html+=`<td class="${isT?'tc-td':isW?'wknd-col':''}"><div class="tl-cell" ${click}>${cells||''}</div></td>`;
+      });
+      html+='</tr>';
+    });
+    html+='</tbody></table></div>';
+    document.getElementById('wk-content').innerHTML=html;
+    // Bind dot clicks
+    document.getElementById('wk-content').querySelectorAll('.tl-dot[data-eid]').forEach(dot=>{
+      dot.addEventListener('click',e=>{ e.stopPropagation(); Slot.edit(e.target.dataset.eid); });
     });
   },
 
