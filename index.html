@@ -736,11 +736,12 @@ const Setup = {
     err.style.display='none';
     let cfg;
     try{
-      // Accept either a raw JSON object or the variable assignment form
+      // Strip optional variable assignment wrapper and trailing semicolon
       const clean=raw.replace(/^const\s+firebaseConfig\s*=\s*/,'').replace(/;?\s*$/,'');
-      cfg=JSON.parse(clean);
+      // Use Function() to handle JS object literals (unquoted keys) as well as strict JSON
+      cfg = new Function('return ('+clean+')')();
     } catch{
-      err.innerHTML='<strong>Invalid JSON.</strong> Paste the exact config object from Firebase — it starts with <code>{</code> and ends with <code>}</code>.';
+      err.innerHTML='<strong>Invalid config.</strong> Paste the exact config object from Firebase — it starts with <code>{</code> and ends with <code>}</code>.';
       err.style.display='block'; return;
     }
     if(!cfg.apiKey||!cfg.databaseURL){
