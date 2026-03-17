@@ -494,7 +494,8 @@
   <div class="modal">
     <div class="mtitle" id="ms-title">Add Booking</div>
     <input type="hidden" id="ms-id">
-    <div class="fg" id="ms-for-row" style="display:none"><label class="lbl">Book for</label><select id="ms-for" class="sel" onchange="Slot.onControllerChange()"><option value="">Select controller…</option></select></div>
+    <input type="hidden" id="ms-for">
+    <div id="ms-for-name" style="display:none;font-size:.8rem;color:var(--txs);margin-bottom:.6rem;padding:.3rem .5rem;background:var(--bg);border-radius:var(--r)">👤 Booking for: <strong id="ms-for-label"></strong></div>
     <div class="fg"><label class="lbl">Date</label><input type="date" id="ms-date" class="inp"></div>
     <div class="fg">
       <label class="lbl">Time slot</label>
@@ -1058,10 +1059,10 @@ const Cal = {
   },
 
   _renderWeek(){
-    const uid=App.user.uid, today=U.today();
+    const today=U.today();
     // Find Monday of current week
     const d=new Date(this.cur);
-    const dow=d.getDay()===0?6:d.getDay()-1; // 0=Mon
+    const dow=d.getDay()===0?6:d.getDay()-1;
     d.setDate(d.getDate()-dow);
     const monday=new Date(d);
     const days=[];
@@ -1070,22 +1071,27 @@ const Cal = {
     }
     const startLabel=days[0].toLocaleDateString('en-GB',{day:'numeric',month:'short'});
     const endLabel=days[6].toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
-    document.getElementById('cal-lbl').textContent=`${startLabel} – ${endLabel}`;
+    document.getElementById('cal-lbl').textContent=startLabel+' – '+endLabel;
 
+    const uid=App.user.uid;
     const entries=Cache.entriesArr().filter(e=>e.userId===uid);
     const eMap={}; entries.forEach(e=>{ (eMap[e.date]=eMap[e.date]||[]).push(e); });
     const aMap={};
-    const allYM=new Set(days.map(d=>[d.getFullYear(),d.getMonth()]));
-    allYM.forEach(([y,m])=>{ Cache.availForUser(uid).forEach(rule=>{ U.expandAvail(rule,y,m).forEach(date=>{ (aMap[date]=aMap[date]||[]).push(rule); }); }); });
-    // Fix: iterate unique y,m pairs
     const ymSeen=new Set();
     days.forEach(d=>{
-      const key=`${d.getFullYear()}-${d.getMonth()}`;
-      if(!ymSeen.has(key)){ ymSeen.add(key); Cache.availForUser(uid).forEach(rule=>{ U.expandAvail(rule,d.getFullYear(),d.getMonth()).forEach(date=>{ (aMap[date]=aMap[date]||[]).push(rule); }); }); }
+      const key=d.getFullYear()+'-'+d.getMonth();
+      if(!ymSeen.has(key)){
+        ymSeen.add(key);
+        Cache.availForUser(uid).forEach(rule=>{
+          U.expandAvail(rule,d.getFullYear(),d.getMonth()).forEach(date=>{ (aMap[date]=aMap[date]||[]).push(rule); });
+        });
+      }
     });
 
     const WDAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-    let html='<div class="week-grid">';
+    const container=document.getElementById('cal-week');
+    container.innerHTML='';
+    const grid=document.createElement('div'); grid.className='week-grid';
     days.forEach((d,i)=>{
       const ds=d.toISOString().slice(0,10);
       const isT=ds===today;
@@ -1093,41 +1099,65 @@ const Cal = {
       const avRules=aMap[ds]||[];
       const hasAvail=avRules.some(r=>r.type==='available');
       const hasUnavail=avRules.some(r=>r.type==='unavailable');
-      let cls='week-day';
-      if(isT) cls+=' is-today';
-      else if(hasUnavail) cls+=' is-unavail';
-      else if(hasAvail) cls+=' is-avail';
-      let chips='';
-      de.forEach(e=>{ chips+=`<div class="chip ${U.chipCls(e.slot)}" onclick="Slot.edit('${e.id}')" style="margin-bottom:.2rem">${U.esc(e.clientName||e.slot)}<div style="font-size:.62rem;opacity:.7">${U.esc(e.factory||'')}</div></div>`; });
-      if(hasAvail&&!hasUnavail) chips+=`<div class="av-tag av-tag-yes" style="font-size:.65rem">✓ Avail</div>`;
-      if(hasUnavail) chips+=`<div class="av-tag av-tag-no" style="font-size:.65rem">✗ Unavail</div>`;
-      html+=`<div class="${cls}"><div class="week-day-hdr" onclick="(function(){const ds='${ds}',de=${JSON.stringify(de.map(e=>e.id))},av=${JSON.stringify(avRules.length>0)};if(de.length>0)Slot.edit(de[0]);else if(av)Avail.openForDate('${ds}');else{App._pendingDate='${ds}';document.getElementById('m-day-title').textContent='${U.fmt(ds)}';M.open('m-day');}})()"><span class="wdn">${WDAYS[i]}</span><span class="wdd">${d.getDate()}</span></div><div class="week-day-body">${chips||'<span style="color:var(--txs);font-size:.7rem">Free</span>'}</div></div>`;
+      const dayDiv=document.createElement('div');
+      dayDiv.className='week-day'+(isT?' is-today':hasUnavail?' is-unavail':hasAvail?' is-avail':'');
+      // Header
+      const hdr=document.createElement('div'); hdr.className='week-day-hdr';
+      hdr.innerHTML='<span class="wdn">'+WDAYS[i]+'</span><span class="wdd">'+d.getDate()+'</span>';
+      hdr.addEventListener('click',()=>this._dayClick(ds,de,avRules));
+      // Body
+      const body=document.createElement('div'); body.className='week-day-body';
+      if(!de.length && !hasAvail && !hasUnavail){
+        body.innerHTML='<span style="color:var(--txs);font-size:.7rem">Free</span>';
+      } else {
+        de.forEach(e=>{
+          const chip=document.createElement('div');
+          chip.className='chip '+U.chipCls(e.slot);
+          chip.style.marginBottom='.2rem';
+          chip.innerHTML=U.esc(e.clientName||e.slot)+'<div style="font-size:.62rem;opacity:.7">'+U.esc(e.factory||'')+'</div>';
+          chip.addEventListener('click',ev=>{ ev.stopPropagation(); Slot.edit(e.id); });
+          body.appendChild(chip);
+        });
+        if(hasAvail&&!hasUnavail){ const t=document.createElement('div'); t.className='av-tag av-tag-yes'; t.style.fontSize='.65rem'; t.textContent='✓ Avail'; body.appendChild(t); }
+        if(hasUnavail){ const t=document.createElement('div'); t.className='av-tag av-tag-no'; t.style.fontSize='.65rem'; t.textContent='✗ Unavail'; body.appendChild(t); }
+      }
+      dayDiv.appendChild(hdr); dayDiv.appendChild(body);
+      grid.appendChild(dayDiv);
     });
-    html+='</div>';
-    document.getElementById('cal-week').innerHTML=html;
+    container.appendChild(grid);
   },
 
   _renderList(){
     const uid=App.user.uid;
-    // Show all entries sorted by date
     const entries=Cache.entriesArr().filter(e=>e.userId===uid).sort((a,b)=>a.date<b.date?-1:1);
     document.getElementById('cal-lbl').textContent='All Bookings';
+    const container=document.getElementById('cal-list');
+    container.innerHTML='';
     if(!entries.length){
-      document.getElementById('cal-list').innerHTML='<div class="cal-list-wrap"><div class="cl-empty">📭 No bookings yet.<br><span style="font-size:.8rem">Click a day on the Month or Week view to add one.</span></div></div>';
+      container.innerHTML='<div class="cal-list-wrap"><div class="cl-empty">No bookings yet. Click a day to add one.</div></div>';
       return;
     }
-    let html='<div class="cal-list-wrap">', lastMonth='';
+    const wrap=document.createElement('div'); wrap.className='cal-list-wrap';
+    let lastMonth='';
     entries.forEach(e=>{
       const mLabel=new Date(e.date+'T00:00').toLocaleDateString('en-GB',{month:'long',year:'numeric'});
-      if(mLabel!==lastMonth){ html+=`<div class="cl-month">${mLabel}</div>`; lastMonth=mLabel; }
-      const dow=new Date(e.date+'T00:00').toLocaleDateString('en-GB',{weekday:'short'});
-      const day=new Date(e.date+'T00:00').getDate();
-      const slotBadge=`<span class="badge ${U.badgeCls(e.slot)}" style="font-size:.65rem">${e.slot}</span>`;
-      const qty=e.expectedQty!=null||e.finalQty!=null?`<span style="margin-left:.4rem;color:var(--txs)">Exp: ${e.expectedQty??'—'} / Final: ${e.finalQty??'—'}</span>`:'';
-      html+=`<div class="cl-row" onclick="Slot.edit('${e.id}')"><div class="cl-date"><div>${day}</div><div class="cl-date-sub">${dow}</div></div><div class="cl-info"><div class="cl-client">${U.esc(e.clientName||'—')} ${slotBadge}</div><div class="cl-detail">${U.esc(e.factory||'')}${qty}${e.notes?` · ${U.esc(e.notes)}`:''}</div></div></div>`;
+      if(mLabel!==lastMonth){
+        const sep=document.createElement('div'); sep.className='cl-month'; sep.textContent=mLabel;
+        wrap.appendChild(sep); lastMonth=mLabel;
+      }
+      const d=new Date(e.date+'T00:00');
+      const row=document.createElement('div'); row.className='cl-row';
+      const dateDiv=document.createElement('div'); dateDiv.className='cl-date';
+      dateDiv.innerHTML='<div>'+d.getDate()+'</div><div class="cl-date-sub">'+d.toLocaleDateString('en-GB',{weekday:'short'})+'</div>';
+      const info=document.createElement('div'); info.className='cl-info';
+      const qty=(e.expectedQty!=null||e.finalQty!=null)?(' · Exp: '+(e.expectedQty??'—')+' / Final: '+(e.finalQty??'—')):'';
+      info.innerHTML='<div class="cl-client">'+U.esc(e.clientName||'—')+' <span class="badge '+U.badgeCls(e.slot)+'" style="font-size:.65rem">'+e.slot+'</span></div>'
+        +'<div class="cl-detail">'+U.esc(e.factory||'')+qty+(e.notes?' · '+U.esc(e.notes):'')+'</div>';
+      row.appendChild(dateDiv); row.appendChild(info);
+      row.addEventListener('click',()=>Slot.edit(e.id));
+      wrap.appendChild(row);
     });
-    html+='</div>';
-    document.getElementById('cal-list').innerHTML=html;
+    container.appendChild(wrap);
   }
 };
 
@@ -1136,33 +1166,29 @@ const Cal = {
 // ════════════════════════════════════
 const Slot = {
   _isAdmin(){ return App.user?.role==='super_admin'; },
-  _fillControllerDrop(selUid){
-    const row=document.getElementById('ms-for-row');
-    const sel=document.getElementById('ms-for');
-    if(!this._isAdmin()){ row.style.display='none'; return; }
-    row.style.display='';
-    const controllers=Cache.usersArr().filter(u=>u.role==='controller'&&u.active).sort((a,b)=>a.name.localeCompare(b.name));
-    sel.innerHTML='<option value="">Select controller…</option>'+controllers.map(u=>`<option value="${u.uid}" ${u.uid===selUid?'selected':''}>${U.esc(u.name)}${u.country?' ('+u.country+')':''}</option>`).join('');
-    // After filling, update clients for selected controller
-    if(selUid) this._fillClients(selUid,'','');
-  },
-  onControllerChange(){
-    const uid=document.getElementById('ms-for').value;
-    this._fillClients(uid,'','');
+  _setForUser(uid){
+    document.getElementById('ms-for').value=uid||'';
+    const nameEl=document.getElementById('ms-for-name');
+    if(uid && this._isAdmin()){
+      const u=Cache.users[uid];
+      document.getElementById('ms-for-label').textContent=(u?.name||uid)+(u?.country?' — '+u.country:'');
+      nameEl.style.display='block';
+    } else {
+      nameEl.style.display='none';
+    }
   },
   add(date, forUid=null){
     this._reset();
     document.getElementById('ms-title').textContent='Add Booking';
     document.getElementById('ms-date').value=date||U.today();
     document.getElementById('ms-del').style.display='none';
-    const targetUid=forUid||(this._isAdmin()?'':App.user.uid);
-    this._fillControllerDrop(targetUid);
-    if(!this._isAdmin()) this._fillClients(App.user.uid,'','');
+    const targetUid=forUid||App.user.uid;
+    this._setForUser(targetUid);
+    this._fillClients(targetUid,'','');
     M.open('m-slot');
   },
   edit(id){
     const e=Cache.entries[id]; if(!e) return;
-    // Only admin can edit others' bookings
     if(!this._isAdmin() && e.userId!==App.user.uid) return;
     this._reset();
     document.getElementById('ms-title').textContent='Edit Booking';
@@ -1173,9 +1199,8 @@ const Slot = {
     document.getElementById('ms-fqty').value=e.finalQty!=null?e.finalQty:'';
     document.getElementById('ms-del').style.display='inline-flex';
     this.pick(e.slot);
-    this._fillControllerDrop(e.userId);
-    if(!this._isAdmin()) this._fillClients(e.userId||App.user.uid, e.clientId||'', e.factory||'');
-    else this._fillClients(e.userId, e.clientId||'', e.factory||'');
+    this._setForUser(e.userId);
+    this._fillClients(e.userId||App.user.uid, e.clientId||'', e.factory||'');
     M.open('m-slot');
   },
   pick(type){
@@ -1221,9 +1246,8 @@ const Slot = {
     if(!type){err.textContent='Please select a time slot.';err.style.display='block';return;}
     if(!cid){err.textContent='Please select a client.';err.style.display='block';return;}
     if(!fac){err.textContent='Please select a factory.';err.style.display='block';return;}
-    // Determine target user (admin can book for any controller)
-    const targetUid=this._isAdmin()?(document.getElementById('ms-for').value||App.user.uid):App.user.uid;
-    if(this._isAdmin()&&!document.getElementById('ms-for').value){err.textContent='Please select a controller.';err.style.display='block';return;}
+    // Determine target user (admin books for pre-set controller, others for themselves)
+    const targetUid=document.getElementById('ms-for').value||App.user.uid;
     const targetUser=Cache.users[targetUid]||App.user;
     const c=Cache.clients[cid];
     const conflict=Cache.entriesArr().find(e=>e.id!==id&&e.userId===targetUid&&e.date===date&&e.slot===type);
