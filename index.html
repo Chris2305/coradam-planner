@@ -9,6 +9,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
   <style>
     :root{
       --p:#191d64;--pd:#12154a;--pl:#2d3299;
@@ -237,6 +238,17 @@
     /* Divider */
     .divider{border:none;border-top:1px solid var(--bdr);margin:1rem 0}
 
+    /* Freshbooks */
+    .fb-status{display:inline-flex;align-items:center;gap:.45rem;font-size:.82rem;font-weight:700;padding:.3rem .7rem;border-radius:999px}
+    .fb-on{background:#dcfce7;color:#166534}.fb-off{background:#fee2e2;color:#991b1b}
+    .fb-dot{width:8px;height:8px;border-radius:50%;background:currentColor;opacity:.8}
+    .fb-card{background:#fff;border:1px solid var(--bdr);border-radius:var(--r);margin-bottom:1.2rem;box-shadow:var(--sh);overflow:hidden}
+    .fb-head{padding:.8rem 1.1rem;border-bottom:1px solid var(--bdr);font-weight:800;font-size:.9rem;display:flex;justify-content:space-between;align-items:center}
+    .fb-body{padding:1rem}
+    .fb-note{font-size:.78rem;color:var(--txs);margin-bottom:.75rem;line-height:1.55}
+    .fb-result{margin-top:.75rem;font-size:.82rem;padding:.55rem .75rem;border-radius:6px}
+    .fb-result.ok{background:#f0fdf4;color:#166534}.fb-result.err{background:#fef2f2;color:#991b1b}
+
     @media(max-width:620px){
       .cal-day{min-height:62px;padding:.25rem}
       .cal-wrap,.adm-wrap,.set-wrap{padding:.65rem}
@@ -436,6 +448,7 @@
         <div class="stab on" onclick="Sett.tab('users')">👥 Controllers</div>
         <div class="stab" onclick="Sett.tab('clients')">🏭 Clients</div>
         <div class="stab" onclick="Sett.tab('data')">💾 Data</div>
+        <div class="stab" onclick="Sett.tab('freshbooks')">🔗 Freshbooks</div>
       </div>
       <div id="gt-users" class="gtab on" style="margin-top:1rem">
         <div class="set-card">
@@ -463,6 +476,11 @@
             <button class="btn btn-s btn-sm" onclick="Setup.reset()">🔧 Change Firebase config</button>
           </div>
         </div>
+      </div>
+
+      <div id="gt-freshbooks" class="gtab" style="margin-top:1rem">
+        <!-- Populated by FB.render() -->
+        <div style="padding:2rem;text-align:center;color:var(--txs)">Loading Freshbooks…</div>
       </div>
     </div>
 
@@ -745,7 +763,7 @@ const LS = {
 // ════════════════════════════════════
 // FIREBASE
 // ════════════════════════════════════
-let fapp, fauth, fdb;
+let fapp, fauth, fdb, ffn;
 function fbRef(path){ return fdb.ref(path); }
 async function fbGet(path){ const s=await fbRef(path).get(); return s.val(); }
 async function fbSet(path,val){ await fbRef(path).set(val); }
@@ -851,12 +869,21 @@ const App = {
   _pendingDate: null,
 
   async init(){
-    const cfg=LS.getCfg()||{apiKey:"AIzaSyCK67ERv8OmlY7p12iDhncVXA03Ga1ai7Y",authDomain:"coradam-planner.firebaseapp.com",databaseURL:"https://coradam-planner-default-rtdb.europe-west1.firebasedatabase.app",projectId:"coradam-planner",storageBucket:"coradam-planner.firebasestorage.app",messagingSenderId:"1030102827382",appId:"1:1030102827382:web:f67d0a6783865d9a66ba57",measurementId:"G-RXDVDSZ7P1"};
+    const cfg=LS.getCfg()||__FIREBASE_CONFIG__;
     if(!cfg){ show('setup'); return; }
     // Init Firebase
     fapp=firebase.initializeApp(cfg);
     fauth=firebase.auth();
     fdb=firebase.database();
+    ffn=firebase.functions();
+    // Detect Freshbooks OAuth callback redirect
+    const _fbParam=new URLSearchParams(window.location.search).get('fb');
+    if(_fbParam) history.replaceState({},'',window.location.pathname);
+    if(_fbParam==='connected') this._fbConnected=true;
+    if(_fbParam==='error'){
+      const _fbMsg=new URLSearchParams(window.location.search).get('msg')||'Unknown error';
+      this._fbError=_fbMsg;
+    }
     show('login');
     // Listen for auth state
     fauth.onAuthStateChanged(async u=>{
@@ -915,6 +942,9 @@ const App = {
     });
   },
 
+  _fbConnected: false,
+  _fbError: null,
+
   _afterLogin(){
     const u=this.user;
     // Set avatar
@@ -924,6 +954,9 @@ const App = {
     });
     if(u.role==='super_admin'){ this._goAdmin(); }
     else { this._goCalendar(); }
+    // Show Freshbooks OAuth result toasts
+    if(this._fbConnected){ this._fbConnected=false; setTimeout(()=>toast('Freshbooks connected! Go to Settings → Freshbooks to sync clients.','ok'),400); }
+    if(this._fbError){ const m=this._fbError; this._fbError=null; setTimeout(()=>toast('Freshbooks error: '+m,'err'),400); }
   },
 
   _goCalendar(){
@@ -1676,11 +1709,12 @@ const Sett = {
 
   tab(name){
     this._tab=name;
-    document.querySelectorAll('.stab').forEach((t,i)=>t.classList.toggle('on',['users','clients','data'][i]===name));
+    document.querySelectorAll('.stab').forEach((t,i)=>t.classList.toggle('on',['users','clients','data','freshbooks'][i]===name));
     document.querySelectorAll('.gtab').forEach(t=>t.classList.remove('on'));
     document.getElementById('gt-'+name).classList.add('on');
     if(name==='users') this._renderUsers();
     if(name==='clients') this._renderClients();
+    if(name==='freshbooks') FB.render();
   },
 
   init(){ this.tab(this._tab); },
@@ -1873,6 +1907,258 @@ const Sett = {
       await fauth.signOut();
       toast('All data wiped.'); setTimeout(()=>location.reload(),1500);
     } catch{ toast('Failed.','err'); }
+    finally{ Spin.off(); }
+  }
+};
+
+// ════════════════════════════════════
+// FRESHBOOKS INTEGRATION
+// ════════════════════════════════════
+const FB = {
+  _status: null,
+  _clientId: null,
+
+  // ── Main render ───────────────────────────────────────────────────
+  async render(){
+    const sec=document.getElementById('gt-freshbooks');
+    sec.innerHTML='<div style="padding:2rem;text-align:center;color:var(--txs)">Loading…</div>';
+    try{
+      const [clientIdVal, statusRes] = await Promise.all([
+        fbGet('freshbooks/client_id'),
+        ffn.httpsCallable('freshbooksApi')({action:'status'}).then(r=>r.data).catch(()=>({connected:false}))
+      ]);
+      this._clientId=clientIdVal;
+      this._status=statusRes;
+      this._build(sec);
+    } catch(e){
+      sec.innerHTML=`<div style="padding:1rem;color:var(--danger);font-size:.82rem">Error loading Freshbooks status: ${U.esc(e.message)}</div>`;
+    }
+  },
+
+  // ── Build UI ──────────────────────────────────────────────────────
+  _build(sec){
+    const connected=this._status?.connected;
+    const connAt=this._status?.connected_at
+      ? new Date(this._status.connected_at).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})
+      : '';
+
+    // ── Connection card ───────────────────────────────────────────
+    let html=`<div class="fb-card">
+      <div class="fb-head"><span>Freshbooks Connection</span>
+        <span class="fb-status ${connected?'fb-on':'fb-off'}">
+          <span class="fb-dot"></span>${connected?'Connected':'Not connected'}
+          ${connected&&connAt?`<span style="font-weight:400;opacity:.75;font-size:.75rem"> · since ${connAt}</span>`:''}
+        </span>
+      </div>
+      <div class="fb-body">`;
+
+    if(connected){
+      html+=`<p class="fb-note">Your Freshbooks account is linked. You can sync clients and generate monthly estimates below.</p>
+        <button class="btn btn-s btn-sm" onclick="FB._disconnect()">Disconnect</button>`;
+    } else {
+      html+=`<p class="fb-note">Connect your Freshbooks account to import clients and generate monthly estimates automatically.</p>`;
+      if(!this._clientId){
+        html+=`<div class="fg" style="max-width:380px">
+          <label class="lbl">Freshbooks App Client ID</label>
+          <input type="text" id="fb-cid-inp" class="inp" placeholder="Paste your Freshbooks Client ID…" style="font-family:monospace;font-size:.8rem">
+          <div style="font-size:.71rem;color:var(--txs);margin-top:.3rem">Find it in <strong>Freshbooks Developer Hub → Your App → App Settings → Client ID</strong></div>
+        </div>
+        <button class="btn btn-p btn-sm" style="margin-top:.2rem" onclick="FB._saveClientId()">Save &amp; Continue →</button>`;
+      } else {
+        html+=`<div style="margin-bottom:.75rem;font-size:.8rem">
+          Client ID: <code style="font-size:.78rem">${U.esc(this._clientId)}</code>
+          <button class="btn btn-s btn-sm" style="margin-left:.4rem" onclick="FB._clearClientId()">Change</button>
+        </div>
+        <button class="btn btn-p btn-sm" onclick="FB._startOAuth()">🔗 Connect to Freshbooks</button>`;
+      }
+    }
+    html+=`</div></div>`;
+
+    // ── Client import card ────────────────────────────────────────
+    if(connected){
+      html+=`<div class="fb-card">
+        <div class="fb-head">
+          <span>Import Clients from Freshbooks</span>
+          <button class="btn btn-s btn-sm" onclick="FB._loadClients()">↓ Load Freshbooks clients</button>
+        </div>
+        <div id="fb-cl-list" class="fb-body">
+          <p class="fb-note">Click "Load Freshbooks clients" to see your Freshbooks client list. You can import them directly into the planner.</p>
+        </div>
+      </div>`;
+
+      // ── Estimate generation card ──────────────────────────────
+      const now=new Date();
+      const defMo=`${now.getFullYear()}-${S2(now.getMonth()+1)}`;
+      html+=`<div class="fb-card">
+        <div class="fb-head">Generate Monthly Estimates in Freshbooks</div>
+        <div class="fb-body">
+          <p class="fb-note">Creates one draft estimate per client in Freshbooks, with a line item for total audit days booked that month. Only clients that were imported from Freshbooks (and thus have a Freshbooks ID) will be included.</p>
+          <div class="fg" style="max-width:200px">
+            <label class="lbl">Month</label>
+            <input type="month" id="fb-mo-inp" class="inp" value="${defMo}">
+          </div>
+          <button class="btn btn-p btn-sm" onclick="FB._generate()">📄 Generate estimates</button>
+          <div id="fb-gen-result"></div>
+        </div>
+      </div>`;
+    }
+
+    sec.innerHTML=html;
+  },
+
+  // ── Save Client ID ────────────────────────────────────────────────
+  async _saveClientId(){
+    const val=(document.getElementById('fb-cid-inp')?.value||'').trim();
+    if(!val){ toast('Please paste your Freshbooks Client ID first.','err'); return; }
+    Spin.on();
+    try{
+      await fbSet('freshbooks/client_id',val);
+      this._clientId=val;
+      this._build(document.getElementById('gt-freshbooks'));
+      toast('Client ID saved.');
+    } catch(e){ toast('Save failed: '+e.message,'err'); }
+    finally{ Spin.off(); }
+  },
+
+  // ── Clear Client ID ───────────────────────────────────────────────
+  async _clearClientId(){
+    if(!confirm('Remove saved Client ID?')) return;
+    Spin.on();
+    try{
+      await fbDel('freshbooks/client_id');
+      this._clientId=null;
+      this._build(document.getElementById('gt-freshbooks'));
+    } catch(e){ toast('Failed: '+e.message,'err'); }
+    finally{ Spin.off(); }
+  },
+
+  // ── Start OAuth flow ──────────────────────────────────────────────
+  _startOAuth(){
+    if(!this._clientId){ toast('Save your Client ID first.','err'); return; }
+    const cbUrl='https://us-central1-coradam-planner.cloudfunctions.net/freshbooksCallback';
+    const url=`https://auth.freshbooks.com/oauth/authorize?client_id=${encodeURIComponent(this._clientId)}&response_type=code&redirect_uri=${encodeURIComponent(cbUrl)}`;
+    window.location.href=url;
+  },
+
+  // ── Disconnect ────────────────────────────────────────────────────
+  async _disconnect(){
+    if(!confirm('Disconnect Freshbooks? Stored tokens will be removed.')) return;
+    Spin.on();
+    try{
+      await fbDel('freshbooks/tokens');
+      await fbSet('freshbooks/connected',false);
+      this._status={connected:false};
+      this._build(document.getElementById('gt-freshbooks'));
+      toast('Freshbooks disconnected.');
+    } catch(e){ toast('Failed: '+e.message,'err'); }
+    finally{ Spin.off(); }
+  },
+
+  // ── Load + display Freshbooks clients ─────────────────────────────
+  async _loadClients(){
+    const listEl=document.getElementById('fb-cl-list');
+    if(!listEl) return;
+    listEl.innerHTML='<p style="color:var(--txs)">Fetching from Freshbooks…</p>';
+    try{
+      const res=await ffn.httpsCallable('freshbooksApi')({action:'listClients',payload:{page:1}});
+      const clients=res.data?.response?.result?.clients||[];
+      if(!clients.length){
+        listEl.innerHTML='<p class="fb-note">No clients found in your Freshbooks account.</p>';
+        return;
+      }
+      let tbl=`<div style="overflow-x:auto"><table class="utab">
+        <thead><tr><th>Freshbooks Client</th><th>Email</th><th>Planner status</th><th>Action</th></tr></thead><tbody>`;
+      clients.forEach(c=>{
+        const name=(c.organization||(c.fname+' '+c.lname).trim()||'—').trim();
+        const email=c.email||'';
+        const fbId=String(c.id);
+        const existing=Cache.clientsArr().find(pc=>pc.freshbooksId===fbId||pc.name.toLowerCase()===name.toLowerCase());
+        tbl+=`<tr>
+          <td><strong>${U.esc(name)}</strong></td>
+          <td style="font-size:.76rem;color:var(--txs)">${U.esc(email||'—')}</td>
+          <td>${existing?`<span class="badge b-on">In planner</span>`:`<span class="badge b-off">Not imported</span>`}</td>
+          <td>${existing?'<span style="color:var(--txs);font-size:.76rem">—</span>':`<button class="btn btn-p btn-sm" onclick="FB._import('${fbId}','${U.esc(name).replace(/'/g,'\\\'')}')">Import</button>`}</td>
+        </tr>`;
+      });
+      tbl+='</tbody></table></div>';
+      listEl.innerHTML=tbl;
+    } catch(e){
+      listEl.innerHTML=`<p style="color:var(--danger);font-size:.82rem">Error: ${U.esc(e.message)}</p>`;
+    }
+  },
+
+  // ── Import a single Freshbooks client into planner ────────────────
+  async _import(fbId,name){
+    if(!confirm(`Import "${name}" into the Coradam Planner?`)) return;
+    Spin.on();
+    try{
+      const id=U.uuid();
+      const client={id,name,factories:[],userIds:[],freshbooksId:String(fbId)};
+      await fbSet(`clients/${id}`,client);
+      Cache.clients[id]=client;
+      toast(`"${name}" imported.`);
+      this._loadClients(); // refresh table
+    } catch(e){ toast('Import failed: '+e.message,'err'); }
+    finally{ Spin.off(); }
+  },
+
+  // ── Generate monthly estimates ─────────────────────────────────────
+  async _generate(){
+    const month=document.getElementById('fb-mo-inp')?.value;
+    if(!month){ toast('Select a month.','err'); return; }
+    const [y,m]=month.split('-').map(Number);
+    const monthLabel=new Date(y,m-1,1).toLocaleString('en-GB',{month:'long',year:'numeric'});
+    const resultEl=document.getElementById('fb-gen-result');
+
+    // Build per-client day totals (only for Freshbooks-linked clients)
+    const byClient={};
+    Cache.entriesArr()
+      .filter(e=>e.date&&e.date.startsWith(month))
+      .forEach(e=>{
+        const cl=Cache.clients[e.clientId];
+        if(!cl?.freshbooksId) return;
+        const key=cl.freshbooksId;
+        if(!byClient[key]) byClient[key]={name:cl.name,fbId:cl.freshbooksId,days:0};
+        byClient[key].days+=e.slot==='Full Day'?1:0.5;
+      });
+
+    const rows=Object.values(byClient);
+    if(!rows.length){
+      resultEl.innerHTML=`<div class="fb-result err">No bookings found for Freshbooks-linked clients in ${monthLabel}. Import clients first, then check that bookings are attributed to them.</div>`;
+      return;
+    }
+
+    const preview=rows.map(r=>`• ${r.name}: ${r.days} day${r.days!==1?'s':''}`).join('\n');
+    if(!confirm(`Generate ${rows.length} estimate(s) in Freshbooks for ${monthLabel}?\n\n${preview}`)) return;
+
+    Spin.on();
+    let ok=0, fail=0;
+    try{
+      for(const r of rows){
+        try{
+          await ffn.httpsCallable('freshbooksApi')({
+            action:'createEstimate',
+            payload:{
+              estimate:{
+                clientid:Number(r.fbId),
+                create_date:month+'-01',
+                currency_code:'EUR',
+                notes:`Audit days for ${monthLabel} — generated by Coradam Planner`,
+                lines:[{
+                  description:`Audit days — ${monthLabel}`,
+                  qty:String(r.days),
+                  unit_cost:{amount:'0',code:'EUR'}
+                }]
+              }
+            }
+          });
+          ok++;
+        } catch(e){ fail++; console.error('Estimate failed for '+r.name,e); }
+      }
+      const cls=fail?'err':'ok';
+      resultEl.innerHTML=`<div class="fb-result ${cls}">✓ ${ok} estimate${ok!==1?'s':''} created in Freshbooks for ${monthLabel}.${fail?` ${fail} failed — check browser console.`:''}</div>`;
+      toast(`${ok} estimate${ok!==1?'s':''} created.`,fail?'err':'ok');
+    } catch(e){ toast('Error: '+e.message,'err'); }
     finally{ Spin.off(); }
   }
 };
