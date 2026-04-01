@@ -9,7 +9,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
   <style>
     :root{
       --p:#191d64;--pd:#12154a;--pl:#2d3299;
@@ -461,7 +460,7 @@
       </div>
       <div id="gt-clients" class="gtab" style="margin-top:1rem">
         <div class="set-card">
-          <div class="set-head"><span>Client List</span><button class="btn btn-p btn-sm" onclick="Sett.openAddClient()">+ Add client</button></div>
+          <div class="set-head"><span>Client List</span><div style="display:flex;gap:.5rem"><button class="btn btn-s btn-sm" onclick="Sett.bulkImport()">⬆ Import from Resources</button><button class="btn btn-p btn-sm" onclick="Sett.openAddClient()">+ Add client</button></div></div>
           <div style="overflow-x:auto"><table class="utab">
             <thead><tr><th>Client</th><th>Factories</th><th>Assigned controllers</th><th>Edit</th></tr></thead>
             <tbody id="c-tbody"></tbody>
@@ -763,7 +762,7 @@ const LS = {
 // ════════════════════════════════════
 // FIREBASE
 // ════════════════════════════════════
-let fapp, fauth, fdb, ffn;
+let fapp, fauth, fdb;
 function fbRef(path){ return fdb.ref(path); }
 async function fbGet(path){ const s=await fbRef(path).get(); return s.val(); }
 async function fbSet(path,val){ await fbRef(path).set(val); }
@@ -875,7 +874,6 @@ const App = {
     fapp=firebase.initializeApp(cfg);
     fauth=firebase.auth();
     fdb=firebase.database();
-    ffn=firebase.functions();
     // Detect Freshbooks OAuth callback redirect
     const _fbParam=new URLSearchParams(window.location.search).get('fb');
     if(_fbParam) history.replaceState({},'',window.location.pathname);
@@ -1899,6 +1897,61 @@ const Sett = {
     finally{ Spin.off(); }
   },
 
+  async bulkImport(){
+    const IMPORT_CLIENTS=[
+      {name:"Akillis",                                       factories:["HQ"]},
+      {name:"AS29",                                          factories:["Orogems","Delora"]},
+      {name:"Boucheron",                                     factories:["HQ"]},
+      {name:"Chanel",                                        factories:["HQ"]},
+      {name:"Chaumet",                                       factories:["HQ","RASELLI FRANCO SPA","BMC SPA","Nuovi","Patros"]},
+      {name:"Christian Dior Couture",                        factories:["HQ","Perroud","FG"]},
+      {name:"Coradam Ltd",                                   factories:["HQ"]},
+      {name:"De Beers Diamond Jewellers",                    factories:["Ennovie","Eclats Jewelry","Gamma Creations","Breuning","Coringer","Zarian"]},
+      {name:"DoDo Pomelatto Spa",                            factories:["Goldfine"]},
+      {name:"Édéenne",                                       factories:["Gamma Creations"]},
+      {name:"Eleanat",                                       factories:["PRGLUX"]},
+      {name:"FRED Paris",                                    factories:["HQ"]},
+      {name:"Gübelin",                                       factories:["Delora","Gamma Creations","Eclats Jewelry","Casting House"]},
+      {name:"HRH sarl",                                      factories:["HQ"]},
+      {name:"Idyl",                                          factories:["Casting House","Orogems","Breuning","Eclats Jewelry"]},
+      {name:"Jenny Bird USA Inc.",                           factories:["Goldfine","Pranda"]},
+      {name:"Kennedy Watches & Jewellery Pty Ltd",           factories:[]},
+      {name:"Les Ateliers Joailliers LV",                    factories:["HQ"]},
+      {name:"Les Ateliers VCA",                              factories:["HQ","Mattioli"]},
+      {name:"Made Truly",                                    factories:[]},
+      {name:"Manufacture des Accessoires Louis Vuitton SRL", factories:[]},
+      {name:"Mayrena Paris",                                 factories:["Piyapoom","Goldfine"]},
+      {name:"Mazarin Paris",                                 factories:["RGS","Orcatilla"]},
+      {name:"Moltke BVBA",                                   factories:[]},
+      {name:"Nicholas Moltke",                               factories:[]},
+      {name:"Pérouse Paris",                                 factories:["Pranda"]},
+      {name:"Prada SpA",                                     factories:["André Messika Gems","Trimoro"]},
+      {name:"Repossi",                                       factories:["HQ","Big Bag S.R.L","BMC SPA","Fratelli Bovo S.r.l","Atelier Checchin S.R.L","RASELLI FRANCO SPA","Staurino"]},
+      {name:"Rouvenat",                                      factories:["HQ","Trimoro"]},
+      {name:"SAS Atelier Lutèce",                            factories:[]},
+      {name:"Sybarite Jewellery Ltd",                        factories:["Mousson Atelier"]},
+      {name:"Tiffany & Co",                                  factories:["HQ"]},
+      {name:"VEVER",                                         factories:["HQ"]},
+      {name:"Walking Tree EU bvba",                          factories:["Store"]},
+    ];
+    const existingNames=Cache.clientsArr().map(c=>c.name.toLowerCase());
+    const toAdd=IMPORT_CLIENTS.filter(c=>!existingNames.includes(c.name.toLowerCase()));
+    if(!toAdd.length){ toast('All clients already exist — nothing to import.'); return; }
+    if(!confirm(`Import ${toAdd.length} new client(s) into the planner?\n\n${toAdd.map(c=>'• '+c.name).join('\n')}`)) return;
+    Spin.on();
+    try{
+      for(const c of toAdd){
+        const id=U.uuid();
+        const client={id,name:c.name,factories:c.factories,userIds:[]};
+        await fbSet(`clients/${id}`,client);
+        Cache.clients[id]=client;
+      }
+      this._renderClients();
+      toast(`${toAdd.length} client(s) imported.`);
+    } catch(e){ toast('Import failed: '+e.message,'err'); }
+    finally{ Spin.off(); }
+  },
+
   async wipeAll(){
     if(!confirm('⚠ WIPE ALL data (users, clients, bookings, availability) permanently?\n\nThis cannot be undone.')) return;
     Spin.on();
@@ -1917,21 +1970,45 @@ const Sett = {
 const FB = {
   _status: null,
   _clientId: null,
+  _workerUrl: null,
+
+  // ── Call the Cloudflare Worker ────────────────────────────────────
+  async _callWorker(action, payload){
+    if(!this._workerUrl) throw new Error('Worker URL not set');
+    const idToken=await fauth.currentUser.getIdToken(true);
+    const res=await fetch(`${this._workerUrl}/api`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+idToken},
+      body:JSON.stringify({action,payload})
+    });
+    const data=await res.json();
+    if(!res.ok||data.error) throw new Error(data.error||'Worker error');
+    return {data};
+  },
 
   // ── Main render ───────────────────────────────────────────────────
   async render(){
     const sec=document.getElementById('gt-freshbooks');
     sec.innerHTML='<div style="padding:2rem;text-align:center;color:var(--txs)">Loading…</div>';
     try{
-      const [clientIdVal, statusRes] = await Promise.all([
+      const [clientIdVal, workerUrlVal] = await Promise.all([
         fbGet('freshbooks/client_id'),
-        ffn.httpsCallable('freshbooksApi')({action:'status'}).then(r=>r.data).catch(()=>({connected:false}))
+        fbGet('freshbooks/worker_url')
       ]);
       this._clientId=clientIdVal;
-      this._status=statusRes;
+      this._workerUrl=workerUrlVal;
+      // Only check connection status if a Worker URL is saved
+      if(this._workerUrl){
+        try{
+          const res=await this._callWorker('status');
+          this._status=res.data;
+        } catch(e){ this._status={connected:false}; }
+      } else {
+        this._status={connected:false};
+      }
       this._build(sec);
     } catch(e){
-      sec.innerHTML=`<div style="padding:1rem;color:var(--danger);font-size:.82rem">Error loading Freshbooks status: ${U.esc(e.message)}</div>`;
+      sec.innerHTML=`<div style="padding:1rem;color:var(--danger);font-size:.82rem">Error: ${U.esc(e.message)}</div>`;
     }
   },
 
@@ -1954,23 +2031,21 @@ const FB = {
 
     if(connected){
       html+=`<p class="fb-note">Your Freshbooks account is linked. You can sync clients and generate monthly estimates below.</p>
+        <div style="font-size:.78rem;margin-bottom:.75rem">Worker: <code>${U.esc(this._workerUrl)}</code></div>
         <button class="btn btn-s btn-sm" onclick="FB._disconnect()">Disconnect</button>`;
     } else {
-      html+=`<p class="fb-note">Connect your Freshbooks account to import clients and generate monthly estimates automatically.</p>`;
-      if(!this._clientId){
-        html+=`<div class="fg" style="max-width:380px">
-          <label class="lbl">Freshbooks App Client ID</label>
-          <input type="text" id="fb-cid-inp" class="inp" placeholder="Paste your Freshbooks Client ID…" style="font-family:monospace;font-size:.8rem">
-          <div style="font-size:.71rem;color:var(--txs);margin-top:.3rem">Find it in <strong>Freshbooks Developer Hub → Your App → App Settings → Client ID</strong></div>
+      html+=`<p class="fb-note">Enter your Cloudflare Worker URL and Freshbooks Client ID, then click Connect.</p>`;
+      html+=`<div class="fg" style="max-width:400px">
+          <label class="lbl">Cloudflare Worker URL</label>
+          <input type="text" id="fb-worker-inp" class="inp" value="${U.esc(this._workerUrl||'')}" placeholder="https://coradam-freshbooks.YOURNAME.workers.dev" style="font-size:.8rem">
+          <div style="font-size:.71rem;color:var(--txs);margin-top:.3rem">The URL shown after you deploy your Cloudflare Worker</div>
         </div>
-        <button class="btn btn-p btn-sm" style="margin-top:.2rem" onclick="FB._saveClientId()">Save &amp; Continue →</button>`;
-      } else {
-        html+=`<div style="margin-bottom:.75rem;font-size:.8rem">
-          Client ID: <code style="font-size:.78rem">${U.esc(this._clientId)}</code>
-          <button class="btn btn-s btn-sm" style="margin-left:.4rem" onclick="FB._clearClientId()">Change</button>
+        <div class="fg" style="max-width:400px">
+          <label class="lbl">Freshbooks Client ID</label>
+          <input type="text" id="fb-cid-inp" class="inp" value="${U.esc(this._clientId||'')}" placeholder="Paste your Freshbooks Client ID…" style="font-family:monospace;font-size:.8rem">
+          <div style="font-size:.71rem;color:var(--txs);margin-top:.3rem">Freshbooks Developer Hub → Your App → Client ID</div>
         </div>
-        <button class="btn btn-p btn-sm" onclick="FB._startOAuth()">🔗 Connect to Freshbooks</button>`;
-      }
+        <button class="btn btn-p btn-sm" onclick="FB._saveConfig()">Save &amp; Connect to Freshbooks →</button>`;
     }
     html+=`</div></div>`;
 
@@ -2006,38 +2081,27 @@ const FB = {
     sec.innerHTML=html;
   },
 
-  // ── Save Client ID ────────────────────────────────────────────────
-  async _saveClientId(){
-    const val=(document.getElementById('fb-cid-inp')?.value||'').trim();
-    if(!val){ toast('Please paste your Freshbooks Client ID first.','err'); return; }
+  // ── Save config + start OAuth ─────────────────────────────────────
+  async _saveConfig(){
+    const workerUrl=(document.getElementById('fb-worker-inp')?.value||'').trim().replace(/\/$/,'');
+    const clientId=(document.getElementById('fb-cid-inp')?.value||'').trim();
+    if(!workerUrl){ toast('Enter your Cloudflare Worker URL first.','err'); return; }
+    if(!clientId){ toast('Enter your Freshbooks Client ID first.','err'); return; }
     Spin.on();
     try{
-      await fbSet('freshbooks/client_id',val);
-      this._clientId=val;
-      this._build(document.getElementById('gt-freshbooks'));
-      toast('Client ID saved.');
+      await Promise.all([
+        fbSet('freshbooks/worker_url',workerUrl),
+        fbSet('freshbooks/client_id',clientId)
+      ]);
+      this._workerUrl=workerUrl;
+      this._clientId=clientId;
+      toast('Config saved — redirecting to Freshbooks…');
+      setTimeout(()=>{
+        const cbUrl=workerUrl+'/callback';
+        window.location.href=`https://auth.freshbooks.com/oauth/authorize?client_id=${encodeURIComponent(clientId)}&response_type=code&redirect_uri=${encodeURIComponent(cbUrl)}`;
+      },800);
     } catch(e){ toast('Save failed: '+e.message,'err'); }
     finally{ Spin.off(); }
-  },
-
-  // ── Clear Client ID ───────────────────────────────────────────────
-  async _clearClientId(){
-    if(!confirm('Remove saved Client ID?')) return;
-    Spin.on();
-    try{
-      await fbDel('freshbooks/client_id');
-      this._clientId=null;
-      this._build(document.getElementById('gt-freshbooks'));
-    } catch(e){ toast('Failed: '+e.message,'err'); }
-    finally{ Spin.off(); }
-  },
-
-  // ── Start OAuth flow ──────────────────────────────────────────────
-  _startOAuth(){
-    if(!this._clientId){ toast('Save your Client ID first.','err'); return; }
-    const cbUrl='https://us-central1-coradam-planner.cloudfunctions.net/freshbooksCallback';
-    const url=`https://auth.freshbooks.com/oauth/authorize?client_id=${encodeURIComponent(this._clientId)}&response_type=code&redirect_uri=${encodeURIComponent(cbUrl)}`;
-    window.location.href=url;
   },
 
   // ── Disconnect ────────────────────────────────────────────────────
@@ -2060,7 +2124,7 @@ const FB = {
     if(!listEl) return;
     listEl.innerHTML='<p style="color:var(--txs)">Fetching from Freshbooks…</p>';
     try{
-      const res=await ffn.httpsCallable('freshbooksApi')({action:'listClients',payload:{page:1}});
+      const res=await this._callWorker('listClients',{page:1});
       const clients=res.data?.response?.result?.clients||[];
       if(!clients.length){
         listEl.innerHTML='<p class="fb-note">No clients found in your Freshbooks account.</p>';
@@ -2136,9 +2200,7 @@ const FB = {
     try{
       for(const r of rows){
         try{
-          await ffn.httpsCallable('freshbooksApi')({
-            action:'createEstimate',
-            payload:{
+          await this._callWorker('createEstimate',{
               estimate:{
                 clientid:Number(r.fbId),
                 create_date:month+'-01',
