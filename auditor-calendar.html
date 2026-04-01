@@ -868,7 +868,16 @@ const App = {
   _pendingDate: null,
 
   async init(){
-    const cfg=LS.getCfg()||{"apiKey":"AIzaSyCK67ERv8OmlY7p12iDhncVXA03Ga1ai7Y","authDomain":"coradam-planner.firebaseapp.com","databaseURL":"https://coradam-planner-default-rtdb.europe-west1.firebasedatabase.app","projectId":"coradam-planner","storageBucket":"coradam-planner.firebasestorage.app","messagingSenderId":"1030102827382","appId":"1:1030102827382:web:f67d0a6783865d9a66ba57","measurementId":"G-RXDVDSZ7P1"};
+    const cfg=LS.getCfg()||{
+  apiKey: "AIzaSyCK67ERv8OmlY7p12iDhncVXA03Ga1ai7Y",
+  authDomain: "coradam-planner.firebaseapp.com",
+  databaseURL: "https://coradam-planner-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "coradam-planner",
+  storageBucket: "coradam-planner.firebasestorage.app",
+  messagingSenderId: "1030102827382",
+  appId: "1:1030102827382:web:f67d0a6783865d9a66ba57",
+  measurementId: "G-RXDVDSZ7P1"
+};
     if(!cfg){ show('setup'); return; }
     // Init Firebase
     fapp=firebase.initializeApp(cfg);
