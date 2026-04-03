@@ -855,4 +855,442 @@ canvas {
     order: 0;
   }
 }
+  /* ---------- Responsive/layout fix patch ---------- */
+
+.hdr {
+  gap: 0.75rem;
+}
+
+.hdr-l,
+.hdr-r,
+.hdr-actions,
+.hdr-actions-main,
+.hdr-actions-user {
+  min-width: 0;
+}
+
+.hdr-r {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  flex-wrap: nowrap;
+}
+
+.hdr-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.hdr-actions-main {
+  flex: 0 1 auto;
+}
+
+.hdr-actions-user {
+  flex: 0 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex-wrap: nowrap;
+}
+
+.hdr-avatar {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  display: block;
+  align-self: center;
+  margin: 0;
+}
+
+.hdr-name {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.hdr .btn,
+.hdr .btn-sm,
+.ntabs,
+.ntab {
+  align-self: center;
+}
+
+.ntabs {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+}
+
+.ntab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  white-space: nowrap;
+}
+
+.utab {
+  width: 100%;
+  table-layout: auto;
+}
+
+.utab th,
+.utab td {
+  vertical-align: middle;
+}
+
+.utab td:last-child,
+.utab th:last-child {
+  white-space: nowrap;
+}
+
+.badge,
+.fb-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  word-break: normal;
+  overflow-wrap: normal;
+  line-height: 1;
+  min-height: 30px;
+  padding: 0.22rem 0.7rem;
+}
+
+.b-on,
+.b-off {
+  min-width: 74px;
+}
+
+.set-card > div[style*="overflow-x:auto"] {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.set-head {
+  gap: 0.75rem;
+}
+
+.set-head > * {
+  min-width: 0;
+}
+
+.set-head > div[style*="display:flex"] {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.country-bar,
+.legend,
+.vt-btns,
+.fbar {
+  min-width: 0;
+}
+
+.fg-f {
+  flex: 1 1 180px;
+}
+
+.fbar > .btn {
+  flex: 0 0 auto;
+}
+
+.cal-nav-main {
+  flex: 1 1 420px;
+  min-width: 0;
+  text-align: center;
+}
+
+.cal-nav-side {
+  flex: 0 0 auto;
+}
+
+.tl-scroll,
+.ltab,
+.utab {
+  min-width: 0;
+}
+
+/* ---------- Large desktop ---------- */
+@media (min-width: 1200px) {
+  .adm-wrap {
+    padding: 1.1rem 1.25rem;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(6, minmax(120px, 1fr));
+  }
+
+  .utab th,
+  .utab td,
+  .ltab th,
+  .ltab td {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .hdr-r {
+    gap: 0.75rem;
+  }
+}
+
+/* ---------- Tablet / small desktop ---------- */
+@media (max-width: 1024px) {
+  .hdr {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .hdr-r {
+    gap: 0.45rem;
+  }
+
+  .hdr-actions {
+    gap: 0.4rem;
+  }
+
+  .hdr-name {
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .set-head {
+    padding: 0.75rem 0.95rem;
+  }
+
+  .utab th,
+  .utab td {
+    padding: 0.55rem 0.75rem;
+  }
+
+  .b-on,
+  .b-off {
+    min-width: 70px;
+  }
+}
+
+/* ---------- Tablet portrait / wide phones ---------- */
+@media (max-width: 820px) {
+  .hdr {
+    height: auto;
+    min-height: 58px;
+    padding: calc(env(safe-area-inset-top, 0px) + 0.55rem) 0.9rem 0.55rem;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .hdr-l {
+    flex: 1 1 180px;
+  }
+
+  .hdr-r {
+    flex: 1 1 100%;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+  }
+
+  .hdr-actions-main,
+  .hdr-actions-user {
+    flex: 1 1 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+
+  .hdr-actions-user {
+    align-items: center;
+  }
+
+  .ntabs {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .fbar {
+    align-items: stretch;
+  }
+
+  .fg-f {
+    flex: 1 1 calc(50% - 0.6rem);
+    min-width: 180px;
+  }
+
+  .set-head {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .set-head > div[style*="display:flex"] {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .utab {
+    min-width: 760px;
+  }
+}
+
+/* ---------- Mobile ---------- */
+@media (max-width: 640px) {
+  .hdr {
+    padding-left: 0.8rem;
+    padding-right: 0.8rem;
+  }
+
+  .hdr-logo {
+    height: 24px;
+    max-width: 120px;
+  }
+
+  .hdr-actions-main,
+  .hdr-actions-user {
+    width: 100%;
+    gap: 0.45rem;
+  }
+
+  .hdr-actions-user {
+    justify-content: flex-start;
+  }
+
+  .hdr-avatar {
+    flex-basis: 28px;
+    width: 28px;
+    height: 28px;
+  }
+
+  .hdr-name {
+    min-height: 28px;
+    font-size: 0.72rem;
+    max-width: 100%;
+    white-space: normal;
+    line-height: 1.2;
+  }
+
+  .btn {
+    min-height: 40px;
+  }
+
+  .btn-sm {
+    min-height: 34px;
+  }
+
+  .adm-wrap,
+  .cal-wrap,
+  .set-wrap {
+    padding: 0.75rem;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+
+  .stat {
+    padding: 0.7rem;
+  }
+
+  .sv {
+    font-size: 1.2rem;
+  }
+
+  .sl {
+    font-size: 0.64rem;
+  }
+
+  .fbar {
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+
+  .fg-f {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .fbar > .btn {
+    width: 100%;
+  }
+
+  .set-head {
+    padding: 0.75rem 0.85rem;
+  }
+
+  .set-head .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .utab {
+    min-width: 700px;
+  }
+
+  .badge,
+  .fb-status {
+    min-height: 28px;
+    font-size: 0.68rem;
+    padding: 0.2rem 0.62rem;
+  }
+
+  .b-on,
+  .b-off {
+    min-width: 68px;
+  }
+
+  .ntab {
+    padding: 0.38rem 0.7rem;
+    font-size: 0.74rem;
+  }
+}
+
+/* ---------- Narrow phones ---------- */
+@media (max-width: 420px) {
+  .hdr {
+    gap: 0.55rem;
+  }
+
+  .hdr-actions-main .btn,
+  .hdr-actions-user .btn {
+    flex: 1 1 auto;
+  }
+
+  .hdr-actions-user {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    align-items: center;
+  }
+
+  .hdr-actions-user .hdr-name {
+    padding-right: 0.2rem;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .badge,
+  .fb-status {
+    min-width: 64px;
+    font-size: 0.66rem;
+  }
+
+  .utab {
+    min-width: 640px;
+  }
 }
