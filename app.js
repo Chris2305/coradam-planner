@@ -189,10 +189,11 @@ const App = {
   _pendingDate: null,
 
   async init(){
-    const cfg=LS.getCfg()||__FIREBASE_CONFIG__;
+       const embeddedCfg = typeof __FIREBASE_CONFIG__ !== 'undefined' ? __FIREBASE_CONFIG__ : null;
+    const cfg = LS.getCfg() || embeddedCfg;
     if(!cfg){ show('setup'); return; }
     // Init Firebase
-    fapp=firebase.initializeApp(cfg);
+    fapp = firebase.apps.length ? firebase.app() : firebase.initializeApp(cfg);
     fauth=firebase.auth();
     fdb=firebase.database();
     // Detect Freshbooks OAuth callback redirect
@@ -518,19 +519,12 @@ const Cal = {
     });
     container.appendChild(wrap);
     }
-    document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('btn-google-signin')?.addEventListener('click', () => {
-      Auth.signIn();
-    });
+      }
+};
 
-    document.getElementById('btn-setup-save')?.addEventListener('click', () => {
-      Setup.connect();
-    });
-
-    document.getElementById('btn-setup-reset')?.addEventListener('click', () => {
-      Setup.reset();
-    });
-  });
+document.addEventListener('DOMContentLoaded', () => {
+  App.init();
+});
 };
 
 // ════════════════════════════════════
