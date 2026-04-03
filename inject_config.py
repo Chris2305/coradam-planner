@@ -16,18 +16,23 @@ if not CONFIG:
     sys.exit(1)
 
 PLACEHOLDER = "__FIREBASE_CONFIG__"
-HTML_FILE = "auditor-calendar.html"
+HTML_FILES = ["auditor-calendar.html", "index.html"]
 
-with open(HTML_FILE, "r", encoding="utf-8") as f:
-    content = f.read()
+for HTML_FILE in HTML_FILES:
+    if not os.path.exists(HTML_FILE):
+        print(f"SKIP: {HTML_FILE} not found.")
+        continue
 
-if PLACEHOLDER not in content:
-    print(f"WARNING: placeholder '{PLACEHOLDER}' not found in {HTML_FILE}.")
-    sys.exit(0)
+    with open(HTML_FILE, "r", encoding="utf-8") as f:
+        content = f.read()
 
-content = content.replace(PLACEHOLDER, CONFIG)
+    if PLACEHOLDER not in content:
+        print(f"WARNING: placeholder '{PLACEHOLDER}' not found in {HTML_FILE}.")
+        continue
 
-with open(HTML_FILE, "w", encoding="utf-8") as f:
-    f.write(content)
+    content = content.replace(PLACEHOLDER, CONFIG)
 
-print(f"✓ Firebase config injected into {HTML_FILE}.")
+    with open(HTML_FILE, "w", encoding="utf-8") as f:
+        f.write(content)
+
+    print(f"✓ Firebase config injected into {HTML_FILE}.")
