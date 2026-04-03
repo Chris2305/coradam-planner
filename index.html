@@ -6,10 +6,23 @@
   <title>Coradam Planner</title>
   <link rel="icon" type="image/x-icon" href="favicon.ico">
   <link rel="apple-touch-icon" href="favicon-192.png">
+
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://lh3.googleusercontent.com https://*.googleusercontent.com; connect-src 'self' https://*.googleapis.com https://*.firebaseapp.com https://*.firebasedatabase.app wss://*.firebasedatabase.app wss://*.firebaseio.com https://securetoken.googleapis.com https://identitytoolkit.googleapis.com; frame-src https://accounts.google.com https://*.firebaseapp.com https://*.google.com; font-src 'self'; object-src 'none'; base-uri 'self';">
+
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-inline' https://www.gstatic.com https://apis.google.com;
+    style-src 'self' 'unsafe-inline';
+    img-src 'self' data: https://lh3.googleusercontent.com https://*.googleusercontent.com https:;
+    connect-src 'self' https://www.gstatic.com https://*.googleapis.com https://*.firebaseapp.com https://*.firebasedatabase.app wss://*.firebasedatabase.app wss://*.firebaseio.com https://securetoken.googleapis.com https://identitytoolkit.googleapis.com https://www.googleapis.com;
+    frame-src 'self' https://accounts.google.com https://*.firebaseapp.com https://*.google.com;
+    font-src 'self';
+    object-src 'none';
+    base-uri 'self';
+  ">
+
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -42,11 +55,10 @@
         <textarea id="setup-cfg" class="inp ta" style="min-height:130px;font-family:monospace;font-size:.75rem" placeholder='{&#10;  "apiKey": "AIzaSy...",&#10;  "authDomain": "coradam-planner.firebaseapp.com",&#10;  "databaseURL": "https://coradam-planner-default-rtdb.europe-west1.firebasedatabase.app",&#10;  "projectId": "coradam-planner",&#10;  "storageBucket": "...",&#10;  "messagingSenderId": "...",&#10;  "appId": "..."&#10;}'></textarea>
       </div>
       <div id="setup-err" class="err-msg"></div>
-      <button id="btn-setup-save" class="btn btn-p btn-blk">Save &amp; Continue →</button>
+      <button id="btn-setup-save" class="btn btn-p btn-blk" onclick="Setup.connect()">Save &amp; Continue →</button>
     </div>
   </div>
 </div>
-
 
 <!-- ══════════════════════════════
      LOGIN SCREEN
@@ -56,20 +68,16 @@
     <div class="center-card" style="max-width:360px;text-align:center">
       <img src="coradam-logo.png" alt="Coradam" style="height:52px;width:auto;margin:0 auto 1rem;display:block;filter:invert(1)">
       <p class="card-sub">Sign in with your Coradam Google account to continue.</p>
-      <button id="btn-google-signin" class="btn-google">
+      <button id="btn-google-signin" class="btn-google" onclick="Auth.signIn()">
         <svg class="g-logo" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
         Sign in with Google
       </button>
       <div id="login-err" class="err-msg" style="margin-top:.75rem;text-align:left"></div>
       <p style="margin-top:1rem;font-size:.72rem;color:var(--txs)">Only <strong>@coradam.com</strong> accounts are authorised.</p>
-      <button id="btn-setup-reset" class="btn btn-s btn-sm" style="margin-top:.75rem;font-size:.72rem;opacity:.7">⚙ Change Firebase config</button>
+      <button id="btn-setup-reset" class="btn btn-s btn-sm" style="margin-top:.75rem;font-size:.72rem;opacity:.7" onclick="Setup.reset()">⚙ Change Firebase config</button>
     </div>
   </div>
 </div>
-
-
-<!-- /index.html -->
-<!-- Replace only the sections below -->
 
 <!-- CONTROLLER CALENDAR -->
 <div id="s-cal" class="screen">
@@ -215,51 +223,6 @@
   </div>
 </div>
 
-    <!-- Country filter -->
-    <div class="country-bar" id="country-bar"></div>
-
-    <!-- Other filters -->
-    <div class="fbar">
-      <div class="fg-f">
-        <span class="flbl">Month</span>
-        <input type="month" id="f-mo" class="fsel" onchange="Adm.applyFilters()">
-      </div>
-      <div class="fg-f">
-        <span class="flbl">Controller</span>
-        <select id="f-us" class="fsel" onchange="Adm.applyFilters()"><option value="">All controllers</option></select>
-      </div>
-      <div class="fg-f">
-        <span class="flbl">Client</span>
-        <select id="f-cl" class="fsel" onchange="Adm.applyFilters()"><option value="">All clients</option></select>
-      </div>
-      <div class="fg-f">
-        <span class="flbl">Factory</span>
-        <select id="f-fa" class="fsel" onchange="Adm.applyFilters()"><option value="">All factories</option></select>
-      </div>
-      <button class="btn btn-s btn-sm" style="align-self:flex-end" onclick="Adm.clearFilters()">✕ Clear</button>
-    </div>
-
-    <div id="vw-tl">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.7rem;flex-wrap:wrap;gap:.4rem">
-        <button class="btn btn-s btn-sm" onclick="Adm.prev()">← Prev</button>
-        <div class="cal-lbl" id="adm-lbl"></div>
-        <button class="btn btn-s btn-sm" onclick="Adm.next()">Next →</button>
-      </div>
-      <div class="tl-scroll"><table class="tl" id="tl-tbl"></table></div>
-      <div style="margin-top:.6rem;display:flex;gap:1rem;flex-wrap:wrap">
-        <div class="leg-i"><div style="width:22px;height:10px;border-radius:2px;background:var(--full)"></div>Full Day booking</div>
-        <div class="leg-i"><div style="width:22px;height:10px;border-radius:2px;background:var(--am)"></div>Half AM booking</div>
-        <div class="leg-i"><div style="width:22px;height:10px;border-radius:2px;background:var(--pm)"></div>Half PM booking</div>
-        <div class="leg-i"><div style="width:8px;height:8px;border-radius:50%;background:var(--avail)"></div>Available</div>
-        <div class="leg-i"><div style="width:8px;height:8px;border-radius:50%;background:var(--unavail)"></div>Unavailable</div>
-      </div>
-    </div>
-    <div id="vw-wk" style="display:none"><div id="wk-content"></div></div>
-    <div id="vw-ls" style="display:none"><div id="ls-content"></div></div>
-  </div>
-</div>
-
-
 <!-- ══════════════════════════════
      SETTINGS
 ══════════════════════════════ -->
@@ -272,7 +235,6 @@
     </div>
   </header>
   <div class="set-wrap">
-    <!-- Admin tabs -->
     <div id="set-admin-tabs">
       <div class="stabs">
         <div class="stab on" onclick="Sett.tab('users')">👥 Controllers</div>
@@ -280,6 +242,7 @@
         <div class="stab" onclick="Sett.tab('data')">💾 Data</div>
         <div class="stab" onclick="Sett.tab('freshbooks')">🔗 Freshbooks</div>
       </div>
+
       <div id="gt-users" class="gtab on" style="margin-top:1rem">
         <div class="set-card">
           <div class="set-head"><span>Team Controllers</span><button class="btn btn-p btn-sm" onclick="Sett.openInvite()">+ Add Controller</button></div>
@@ -289,6 +252,7 @@
           </table></div>
         </div>
       </div>
+
       <div id="gt-clients" class="gtab" style="margin-top:1rem">
         <div class="set-card">
           <div class="set-head"><span>Client List</span><div style="display:flex;gap:.5rem"><button class="btn btn-s btn-sm" onclick="Sett.bulkImport()">⬆ Import from Resources</button><button class="btn btn-p btn-sm" onclick="Sett.openAddClient()">+ Add client</button></div></div>
@@ -298,6 +262,7 @@
           </table></div>
         </div>
       </div>
+
       <div id="gt-data" class="gtab" style="margin-top:1rem">
         <div class="set-card">
           <div class="set-head">Danger Zone</div>
@@ -309,12 +274,10 @@
       </div>
 
       <div id="gt-freshbooks" class="gtab" style="margin-top:1rem">
-        <!-- Populated by FB.render() -->
         <div style="padding:2rem;text-align:center;color:var(--txs)">Loading Freshbooks…</div>
       </div>
     </div>
 
-    <!-- Controller profile -->
     <div id="set-profile" style="display:none;margin-top:1rem">
       <div class="set-card">
         <div class="set-head">My Profile</div>
@@ -333,7 +296,6 @@
     </div>
   </div>
 </div>
-
 
 <!-- ══════════════════════════════
      MODALS
@@ -396,7 +358,7 @@
       <label class="lbl">Status</label>
       <div class="avail-btns">
         <button class="av-btn" id="av-yes" onclick="Avail.pickType('available')">✅ Available</button>
-        <button class="av-btn" id="av-no"  onclick="Avail.pickType('unavailable')">🚫 Unavailable</button>
+        <button class="av-btn" id="av-no" onclick="Avail.pickType('unavailable')">🚫 Unavailable</button>
       </div>
       <input type="hidden" id="ma-type">
     </div>
