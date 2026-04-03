@@ -68,30 +68,46 @@
 </div>
 
 
-<!-- ══════════════════════════════
-     CONTROLLER CALENDAR
-══════════════════════════════ -->
+<!-- /index.html -->
+<!-- Replace only the sections below -->
+
+<!-- CONTROLLER CALENDAR -->
 <div id="s-cal" class="screen">
   <header class="hdr">
-    <div class="hdr-l"><img src="coradam-logo.png" class="hdr-logo" alt="Coradam"> <span id="hdr-cal-name" style="opacity:.7;font-weight:400;font-size:.82rem"></span></div>
+    <div class="hdr-l">
+      <img src="coradam-logo.png" class="hdr-logo" alt="Coradam">
+      <span id="hdr-cal-name" class="hdr-meta"></span>
+    </div>
+
     <div class="hdr-r">
-      <button class="btn btn-avail btn-sm" onclick="Avail.openBulk()">🗓 Set Availability</button>
-      <img id="hdr-avatar" class="hdr-avatar" src="" alt="" style="display:none">
-      <span class="hdr-name" id="hdr-cal-user"></span>
-      <button class="btn btn-g btn-sm" onclick="App.goProfile()">⚙</button>
-      <button class="btn btn-g btn-sm" onclick="Auth.signOut()">Sign out</button>
+      <div class="hdr-actions hdr-actions-main">
+        <button class="btn btn-avail btn-sm" onclick="Avail.openBulk()">🗓 Set Availability</button>
+      </div>
+
+      <div class="hdr-actions hdr-actions-user">
+        <img id="hdr-avatar" class="hdr-avatar" src="" alt="" style="display:none">
+        <span class="hdr-name" id="hdr-cal-user"></span>
+        <button class="btn btn-g btn-sm" onclick="App.goProfile()">⚙</button>
+        <button class="btn btn-g btn-sm" onclick="Auth.signOut()">Sign out</button>
+      </div>
     </div>
   </header>
+
   <div class="cal-wrap">
     <div class="cal-nav">
-      <button class="btn btn-s btn-sm" onclick="Cal.prev()">← Prev</button>
-      <div style="text-align:center">
+      <div class="cal-nav-side cal-nav-prev">
+        <button class="btn btn-s btn-sm" onclick="Cal.prev()">← Prev</button>
+      </div>
+
+      <div class="cal-nav-main">
         <div class="cal-lbl" id="cal-lbl"></div>
+
         <div class="vt-btns">
           <button class="vt-btn on" id="vt-month" onclick="Cal.setView('month')">Month</button>
           <button class="vt-btn" id="vt-week" onclick="Cal.setView('week')">Week</button>
           <button class="vt-btn" id="vt-list" onclick="Cal.setView('list')">List</button>
         </div>
+
         <div class="legend" id="cal-legend">
           <div class="leg-i"><div class="leg-d ld-f"></div>Full Day</div>
           <div class="leg-i"><div class="leg-d ld-a"></div>Half AM</div>
@@ -100,8 +116,12 @@
           <div class="leg-i"><div class="leg-d ld-un"></div>Unavailable</div>
         </div>
       </div>
-      <button class="btn btn-s btn-sm" onclick="Cal.next()">Next →</button>
+
+      <div class="cal-nav-side cal-nav-next">
+        <button class="btn btn-s btn-sm" onclick="Cal.next()">Next →</button>
+      </div>
     </div>
+
     <div class="cal-grid" id="cal-grid">
       <div class="cal-hdr">Mon</div><div class="cal-hdr">Tue</div><div class="cal-hdr">Wed</div>
       <div class="cal-hdr">Thu</div><div class="cal-hdr">Fri</div><div class="cal-hdr">Sat</div>
@@ -112,28 +132,88 @@
   </div>
 </div>
 
-
-<!-- ══════════════════════════════
-     ADMIN DASHBOARD
-══════════════════════════════ -->
+<!-- ADMIN DASHBOARD -->
 <div id="s-adm" class="screen">
   <header class="hdr">
-    <div class="hdr-l"><img src="coradam-logo.png" class="hdr-logo" alt="Coradam"></div>
+    <div class="hdr-l">
+      <img src="coradam-logo.png" class="hdr-logo" alt="Coradam">
+    </div>
+
     <div class="hdr-r">
-      <div class="ntabs">
-        <div class="ntab on" id="nt-tl" onclick="Adm.setView('tl')">Timeline</div>
-        <div class="ntab" id="nt-wk" onclick="Adm.setView('wk')">Week</div>
-        <div class="ntab" id="nt-ls" onclick="Adm.setView('ls')">List</div>
+      <div class="hdr-actions hdr-actions-main">
+        <div class="ntabs">
+          <div class="ntab on" id="nt-tl" onclick="Adm.setView('tl')">Timeline</div>
+          <div class="ntab" id="nt-wk" onclick="Adm.setView('wk')">Week</div>
+          <div class="ntab" id="nt-ls" onclick="Adm.setView('ls')">List</div>
+        </div>
       </div>
-      <button class="btn btn-g btn-sm" onclick="Adm.refresh()">↻</button>
-      <button class="btn btn-g btn-sm" onclick="Adm.exportCSV()">⬆ CSV</button>
-      <button class="btn btn-g btn-sm" onclick="App.goSettings()">⚙ Settings</button>
-      <img id="adm-avatar" class="hdr-avatar" src="" alt="" style="display:none">
-      <button class="btn btn-g btn-sm" onclick="Auth.signOut()">Sign out</button>
+
+      <div class="hdr-actions hdr-actions-user">
+        <button class="btn btn-g btn-sm" onclick="Adm.refresh()">↻</button>
+        <button class="btn btn-g btn-sm" onclick="Adm.exportCSV()">⬆ CSV</button>
+        <button class="btn btn-g btn-sm" onclick="App.goSettings()">⚙ Settings</button>
+        <img id="adm-avatar" class="hdr-avatar" src="" alt="" style="display:none">
+        <button class="btn btn-g btn-sm" onclick="Auth.signOut()">Sign out</button>
+      </div>
     </div>
   </header>
+
   <div class="adm-wrap">
     <div class="stats-grid" id="adm-stats"></div>
+    <div class="country-bar" id="country-bar"></div>
+
+    <div class="fbar">
+      <div class="fg-f">
+        <span class="flbl">Month</span>
+        <input type="month" id="f-mo" class="fsel" onchange="Adm.applyFilters()">
+      </div>
+      <div class="fg-f">
+        <span class="flbl">Controller</span>
+        <select id="f-us" class="fsel" onchange="Adm.applyFilters()"><option value="">All controllers</option></select>
+      </div>
+      <div class="fg-f">
+        <span class="flbl">Client</span>
+        <select id="f-cl" class="fsel" onchange="Adm.applyFilters()"><option value="">All clients</option></select>
+      </div>
+      <div class="fg-f">
+        <span class="flbl">Factory</span>
+        <select id="f-fa" class="fsel" onchange="Adm.applyFilters()"><option value="">All factories</option></select>
+      </div>
+      <button class="btn btn-s btn-sm" style="align-self:flex-end" onclick="Adm.clearFilters()">✕ Clear</button>
+    </div>
+
+    <div id="vw-tl">
+      <div class="cal-nav adm-nav">
+        <div class="cal-nav-side cal-nav-prev">
+          <button class="btn btn-s btn-sm" onclick="Adm.prev()">← Prev</button>
+        </div>
+
+        <div class="cal-nav-main">
+          <div class="cal-lbl" id="adm-lbl"></div>
+        </div>
+
+        <div class="cal-nav-side cal-nav-next">
+          <button class="btn btn-s btn-sm" onclick="Adm.next()">Next →</button>
+        </div>
+      </div>
+
+      <div class="tl-scroll">
+        <table class="tl" id="tl-tbl"></table>
+      </div>
+
+      <div style="margin-top:.6rem;display:flex;gap:1rem;flex-wrap:wrap">
+        <div class="leg-i"><div style="width:22px;height:10px;border-radius:2px;background:var(--full)"></div>Full Day booking</div>
+        <div class="leg-i"><div style="width:22px;height:10px;border-radius:2px;background:var(--am)"></div>Half AM booking</div>
+        <div class="leg-i"><div style="width:22px;height:10px;border-radius:2px;background:var(--pm)"></div>Half PM booking</div>
+        <div class="leg-i"><div style="width:8px;height:8px;border-radius:50%;background:var(--avail)"></div>Available</div>
+        <div class="leg-i"><div style="width:8px;height:8px;border-radius:50%;background:var(--unavail)"></div>Unavailable</div>
+      </div>
+    </div>
+
+    <div id="vw-wk" style="display:none"><div id="wk-content"></div></div>
+    <div id="vw-ls" style="display:none"><div id="ls-content"></div></div>
+  </div>
+</div>
 
     <!-- Country filter -->
     <div class="country-bar" id="country-bar"></div>
