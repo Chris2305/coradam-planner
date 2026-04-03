@@ -158,13 +158,20 @@ const Auth = {
     const err=document.getElementById('login-err');
     err.style.display='none';
     try{
+      console.log('Google sign-in clicked');
+      console.log('fauth exists?', !!fauth);
+      
       const provider=new firebase.auth.GoogleAuthProvider();
       provider.setCustomParameters({hd:ALLOWED_DOMAIN});
-      await fauth.signInWithPopup(provider);
+      
+       const result = await fauth.signInWithPopup(provider);
+      console.log('Sign-in success:', result);
+      
     } catch(e){
-      if(e.code==='auth/popup-closed-by-user') return;
-      err.innerHTML='Sign-in failed: '+U.esc(e.message);
-      err.style.display='block';
+      console.error('Google sign-in failed:', e.code, e.message, e);
+      if(e.code === 'auth/popup-closed-by-user') return;
+      err.innerHTML = 'Sign-in failed: ' + U.esc(e.message);
+      err.style.display = 'block';
     }
   },
   async signOut(){
