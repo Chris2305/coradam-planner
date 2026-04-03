@@ -21,6 +21,8 @@ jobs:
         run: python3 inject_config.py
         env:
           FIREBASE_CONFIG: ${{ secrets.FIREBASE_CONFIG }}
+      - name: Copy to index.html
+        run: cp auditor-calendar.html index.html
 
       # Deploy the processed files to the gh-pages branch
       - name: Deploy to GitHub Pages
