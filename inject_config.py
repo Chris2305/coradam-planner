@@ -8,7 +8,7 @@ if not CONFIG:
     sys.exit(1)
 
 PLACEHOLDER = "__FIREBASE_CONFIG__"
-HTML_FILES = ["index.html"]
+HTML_FILES = ["app.js"]
 
 for HTML_FILE in HTML_FILES:
     if not os.path.exists(HTML_FILE):
