@@ -791,4 +791,68 @@ canvas {
   .stats-grid {
     grid-template-columns: 1fr;
   }
+  /* append to style.css */
+
+.hdr-meta {
+  opacity: .7;
+  font-weight: 400;
+  font-size: .82rem;
+}
+
+.hdr-actions {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  min-width: 0;
+}
+
+.hdr-actions-user {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.cal-nav-main {
+  flex: 1 1 420px;
+  min-width: 0;
+  text-align: center;
+}
+
+.cal-nav-side {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 768px) {
+  .hdr-meta {
+    display: block;
+    font-size: .72rem;
+    line-height: 1.2;
+  }
+
+  .hdr-actions-main,
+  .hdr-actions-user {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .cal-nav {
+    align-items: stretch;
+  }
+
+  .cal-nav-side {
+    width: 100%;
+  }
+
+  .cal-nav-side .btn {
+    width: 100%;
+  }
+
+  .cal-nav-main {
+    order: -1;
+    flex-basis: auto;
+  }
+
+  .adm-nav .cal-nav-main {
+    order: 0;
+  }
+}
 }
