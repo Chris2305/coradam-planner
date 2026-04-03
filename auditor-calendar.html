@@ -2141,7 +2141,7 @@ const FB = {
           <td><strong>${U.esc(name)}</strong></td>
           <td style="font-size:.76rem;color:var(--txs)">${U.esc(email||'—')}</td>
           <td>${existing?`<span class="badge b-on">In planner</span>`:`<span class="badge b-off">Not imported</span>`}</td>
-          <td>${existing?'<span style="color:var(--txs);font-size:.76rem">—</span>':`<button class="btn btn-p btn-sm" onclick="FB._import('${fbId}','${U.esc(name).replace(/'/g,'\\\'')}')">Import</button>`}</td>
+          <td>${existing?'<span style="color:var(--txs);font-size:.76rem">—</span>':`<button class="btn btn-p btn-sm" onclick="FB._import('${fbId}','${U.esc(name).split("'").join("\\'")}')">Import</button>`}</td>
         </tr>`;
       });
       tbl+='</tbody></table></div>';
