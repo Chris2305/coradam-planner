@@ -536,7 +536,7 @@ const Cal = {
       wrap.appendChild(row);
     });
     container.appendChild(wrap);
-    }
+  }
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1153,7 +1153,7 @@ const Sett = {
       }
       // Delete availability rules
       for(const a of Cache.availArr().filter(a=>a.userId===uid)){
-        await fbDel(`availability/${a.id}`); delete Cache.avail[a.id];
+        await fbDel(`availability/${a.id}`); delete Cache.availability[a.id];
       }
       // Delete user profile
       await fbDel(`users/${uid}`); delete Cache.users[uid];
