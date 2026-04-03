@@ -519,13 +519,11 @@ const Cal = {
     });
     container.appendChild(wrap);
     }
-      }
 };
 
 document.addEventListener('DOMContentLoaded', () => {
   App.init();
 });
-};
 
 // ════════════════════════════════════
 // SLOT (Booking)
