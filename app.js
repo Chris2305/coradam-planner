@@ -189,7 +189,7 @@ const App = {
   _pendingDate: null,
 
   async init(){
-    const cfg=LS.getCfg()||{
+       const embeddedCfg = typeof {
   apiKey: "AIzaSyCK67ERv8OmlY7p12iDhncVXA03Ga1ai7Y",
   authDomain: "coradam-planner.firebaseapp.com",
   databaseURL: "https://coradam-planner-default-rtdb.europe-west1.firebasedatabase.app",
@@ -198,10 +198,20 @@ const App = {
   messagingSenderId: "1030102827382",
   appId: "1:1030102827382:web:f67d0a6783865d9a66ba57",
   measurementId: "G-RXDVDSZ7P1"
-};
+} !== 'undefined' ? {
+  apiKey: "AIzaSyCK67ERv8OmlY7p12iDhncVXA03Ga1ai7Y",
+  authDomain: "coradam-planner.firebaseapp.com",
+  databaseURL: "https://coradam-planner-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "coradam-planner",
+  storageBucket: "coradam-planner.firebasestorage.app",
+  messagingSenderId: "1030102827382",
+  appId: "1:1030102827382:web:f67d0a6783865d9a66ba57",
+  measurementId: "G-RXDVDSZ7P1"
+} : null;
+    const cfg = LS.getCfg() || embeddedCfg;
     if(!cfg){ show('setup'); return; }
     // Init Firebase
-    fapp=firebase.initializeApp(cfg);
+    fapp = firebase.apps.length ? firebase.app() : firebase.initializeApp(cfg);
     fauth=firebase.auth();
     fdb=firebase.database();
     // Detect Freshbooks OAuth callback redirect
@@ -527,19 +537,12 @@ const Cal = {
     });
     container.appendChild(wrap);
     }
-    document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('btn-google-signin')?.addEventListener('click', () => {
-      Auth.signIn();
-    });
+      }
+};
 
-    document.getElementById('btn-setup-save')?.addEventListener('click', () => {
-      Setup.connect();
-    });
-
-    document.getElementById('btn-setup-reset')?.addEventListener('click', () => {
-      Setup.reset();
-    });
-  });
+document.addEventListener('DOMContentLoaded', () => {
+  App.init();
+});
 };
 
 // ════════════════════════════════════
