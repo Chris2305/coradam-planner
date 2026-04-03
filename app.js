@@ -526,7 +526,20 @@ const Cal = {
       wrap.appendChild(row);
     });
     container.appendChild(wrap);
-  }
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('btn-google-signin')?.addEventListener('click', () => {
+      Auth.signIn();
+    });
+
+    document.getElementById('btn-setup-save')?.addEventListener('click', () => {
+      Setup.connect();
+    });
+
+    document.getElementById('btn-setup-reset')?.addEventListener('click', () => {
+      Setup.reset();
+    });
+  });
 };
 
 // ════════════════════════════════════
