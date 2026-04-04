@@ -84,7 +84,10 @@ async function handleCallback(request, env, url, cors) {
 
     return Response.redirect(`${APP_URL}?fb=connected`);
   } catch (e) {
-    return Response.redirect(`${APP_URL}?fb=error&msg=${encodeURIComponent(e.message)}`);
+    // Log the full error server-side (visible in Cloudflare dashboard → Logs) but
+    // return a generic message in the redirect to avoid leaking internal details.
+    console.error('[Coradam Worker] handleCallback error:', e);
+    return Response.redirect(`${APP_URL}?fb=error&msg=${encodeURIComponent('OAuth connection failed. Please try again.')}`);
   }
 }
 
