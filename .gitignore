@@ -1,0 +1,7 @@
+# macOS metadata — never commit
+.DS_Store
+**/.DS_Store
+
+# Secrets and local config — never commit
+.env
+*.local
