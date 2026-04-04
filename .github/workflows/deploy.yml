@@ -14,13 +14,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Inject the Firebase config from the GitHub Secret.
-      # The secret FIREBASE_CONFIG must contain the full JSON config object,
-      # e.g.: {"apiKey":"AIza...","authDomain":"...","databaseURL":"...","projectId":"...","storageBucket":"...","messagingSenderId":"...","appId":"...","measurementId":"..."}
-      - name: Inject Firebase config
+      # Inject secrets from GitHub into app.js at build time.
+      # Required GitHub Secrets:
+      #   FIREBASE_CONFIG   — full JSON config object from Firebase (apiKey, databaseURL, etc.)
+      #   SUPER_ADMIN_EMAIL — email address of the super-admin account (never committed to source)
+      - name: Inject build-time secrets
         run: python3 inject_config.py
         env:
           FIREBASE_CONFIG: ${{ secrets.FIREBASE_CONFIG }}
+          SUPER_ADMIN_EMAIL: ${{ secrets.SUPER_ADMIN_EMAIL }}
 
       # Deploy the processed files to the gh-pages branch
       - name: Deploy to GitHub Pages

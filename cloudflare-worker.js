@@ -157,7 +157,10 @@ async function handleApi(request, env, cors) {
     throw new Error('Unknown action: ' + action);
 
   } catch (e) {
-    return jsonResponse({ error: e.message }, 500, cors);
+    // Log the full error server-side (visible in Cloudflare dashboard → Logs) but return a generic
+    // message to the client to avoid leaking internal details (stack traces, API error payloads, etc.)
+    console.error('[Coradam Worker] handleApi error:', e);
+    return jsonResponse({ error: 'An internal error occurred. Please try again.' }, 500, cors);
   }
 }
 

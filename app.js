@@ -2,7 +2,9 @@
 // ════════════════════════════════════
 // CONSTANTS
 // ════════════════════════════════════
-const SUPER_ADMIN = 'c.nocher@coradam.com';
+// SUPER_ADMIN is injected at build time by inject_config.py from the SUPER_ADMIN_EMAIL GitHub Secret.
+// It is never committed to source. Fallback to empty string (no super-admin) for local dev.
+const SUPER_ADMIN = typeof __SUPER_ADMIN__ !== 'undefined' ? __SUPER_ADMIN__ : '';
 const ALLOWED_DOMAIN = 'coradam.com';
 const COUNTRIES = ['Italy','Thailand','France','Portugal','Spain','India'];
 const FLAGS = {Italy:'🇮🇹',Thailand:'🇹🇭',France:'🇫🇷',Portugal:'🇵🇹',Spain:'🇪🇸',India:'🇮🇳'};
@@ -129,12 +131,11 @@ const Setup = {
     err.style.display='none';
     let cfg;
     try{
-      // Strip optional variable assignment wrapper and trailing semicolon
+      // Strip optional JS variable assignment wrapper and trailing semicolon, then parse as strict JSON
       const clean=raw.replace(/^const\s+firebaseConfig\s*=\s*/,'').replace(/;?\s*$/,'');
-      // Use Function() to handle JS object literals (unquoted keys) as well as strict JSON
-      cfg = new Function('return ('+clean+')')();
+      cfg = JSON.parse(clean);
     } catch{
-      err.innerHTML='<strong>Invalid config.</strong> Paste the exact config object from Firebase — it starts with <code>{</code> and ends with <code>}</code>.';
+      err.innerHTML='<strong>Invalid config.</strong> Paste the Firebase config as valid JSON — all keys must be in double quotes. It starts with <code>{</code> and ends with <code>}</code>.';
       err.style.display='block'; return;
     }
     if(!cfg.apiKey||!cfg.databaseURL){
@@ -158,15 +159,9 @@ const Auth = {
     const err=document.getElementById('login-err');
     err.style.display='none';
     try{
-      console.log('Google sign-in clicked');
-      console.log('fauth exists?', !!fauth);
-      
       const provider=new firebase.auth.GoogleAuthProvider();
       provider.setCustomParameters({hd:ALLOWED_DOMAIN});
-      
-       const result = await fauth.signInWithPopup(provider);
-      console.log('Sign-in success:', result);
-      
+      await fauth.signInWithPopup(provider);
     } catch(e){
       console.error('Google sign-in failed:', e.code, e.message, e);
       if(e.code === 'auth/popup-closed-by-user') return;
@@ -227,7 +222,8 @@ const App = {
           const pending=Cache.usersArr().find(p=>p.pending&&p.email===email);
           if(pending){
             // Migrate pending profile to real UID
-            profile={...pending,uid:u.uid,name:u.displayName||pending.name||email.split('@')[0],photo:u.photoURL||'',role:email===SUPER_ADMIN?'super_admin':'controller',pending:false,firstLogin:Date.now()};
+            // Preserve existing role from the pending record (never derive role client-side from email)
+            profile={...pending,uid:u.uid,name:u.displayName||pending.name||email.split('@')[0],photo:u.photoURL||'',role:pending.role||'controller',pending:false,firstLogin:Date.now()};
             await fbSet(`users/${u.uid}`,profile);
             Cache.users[u.uid]=profile;
             // Clean up pending record and fix client assignments (best-effort — may fail if rules block it)
@@ -245,15 +241,17 @@ const App = {
               }
             } catch(e){ console.warn('Could not update client assignments:',e.message); }
           } else {
-            profile={uid:u.uid,name:u.displayName||email.split('@')[0],email,photo:u.photoURL||'',country:'',role:email===SUPER_ADMIN?'super_admin':'controller',active:true,firstLogin:Date.now()};
+            // New profiles always start as 'controller'; super_admin role is set by the admin in Firebase
+            profile={uid:u.uid,name:u.displayName||email.split('@')[0],email,photo:u.photoURL||'',country:'',role:'controller',active:true,firstLogin:Date.now()};
             await fbSet(`users/${u.uid}`,profile);
             Cache.users[u.uid]=profile;
           }
         } else {
-          // Update name/photo from Google
-          const upd={...profile,name:u.displayName||profile.name,photo:u.photoURL||profile.photo,role:email===SUPER_ADMIN?'super_admin':'controller'};
-          await fbSet(`users/${u.uid}`,upd);
-          Cache.users[u.uid]=upd; profile=upd;
+          // Update only name/photo from Google — role is managed by admin, never overwritten here
+          const upd={name:u.displayName||profile.name,photo:u.photoURL||profile.photo};
+          await fbUpdate(`users/${u.uid}`,upd);
+          const merged={...profile,...upd};
+          Cache.users[u.uid]=merged; profile=merged;
         }
         this.user=profile;
         this._afterLogin();
@@ -1224,62 +1222,52 @@ const Sett = {
   },
 
   async bulkImport(){
-    const IMPORT_CLIENTS=[
-      {name:"Akillis",                                       factories:["HQ"]},
-      {name:"AS29",                                          factories:["Orogems","Delora"]},
-      {name:"Boucheron",                                     factories:["HQ"]},
-      {name:"Chanel",                                        factories:["HQ"]},
-      {name:"Chaumet",                                       factories:["HQ","RASELLI FRANCO SPA","BMC SPA","Nuovi","Patros"]},
-      {name:"Christian Dior Couture",                        factories:["HQ","Perroud","FG"]},
-      {name:"Coradam Ltd",                                   factories:["HQ"]},
-      {name:"De Beers Diamond Jewellers",                    factories:["Ennovie","Eclats Jewelry","Gamma Creations","Breuning","Coringer","Zarian"]},
-      {name:"DoDo Pomelatto Spa",                            factories:["Goldfine"]},
-      {name:"Édéenne",                                       factories:["Gamma Creations"]},
-      {name:"Eleanat",                                       factories:["PRGLUX"]},
-      {name:"FRED Paris",                                    factories:["HQ"]},
-      {name:"Gübelin",                                       factories:["Delora","Gamma Creations","Eclats Jewelry","Casting House"]},
-      {name:"HRH sarl",                                      factories:["HQ"]},
-      {name:"Idyl",                                          factories:["Casting House","Orogems","Breuning","Eclats Jewelry"]},
-      {name:"Jenny Bird USA Inc.",                           factories:["Goldfine","Pranda"]},
-      {name:"Kennedy Watches & Jewellery Pty Ltd",           factories:[]},
-      {name:"Les Ateliers Joailliers LV",                    factories:["HQ"]},
-      {name:"Les Ateliers VCA",                              factories:["HQ","Mattioli"]},
-      {name:"Made Truly",                                    factories:[]},
-      {name:"Manufacture des Accessoires Louis Vuitton SRL", factories:[]},
-      {name:"Mayrena Paris",                                 factories:["Piyapoom","Goldfine"]},
-      {name:"Mazarin Paris",                                 factories:["RGS","Orcatilla"]},
-      {name:"Moltke BVBA",                                   factories:[]},
-      {name:"Nicholas Moltke",                               factories:[]},
-      {name:"Pérouse Paris",                                 factories:["Pranda"]},
-      {name:"Prada SpA",                                     factories:["André Messika Gems","Trimoro"]},
-      {name:"Repossi",                                       factories:["HQ","Big Bag S.R.L","BMC SPA","Fratelli Bovo S.r.l","Atelier Checchin S.R.L","RASELLI FRANCO SPA","Staurino"]},
-      {name:"Rouvenat",                                      factories:["HQ","Trimoro"]},
-      {name:"SAS Atelier Lutèce",                            factories:[]},
-      {name:"Sybarite Jewellery Ltd",                        factories:["Mousson Atelier"]},
-      {name:"Tiffany & Co",                                  factories:["HQ"]},
-      {name:"VEVER",                                         factories:["HQ"]},
-      {name:"Walking Tree EU bvba",                          factories:["Store"]},
-    ];
-    const existingNames=Cache.clientsArr().map(c=>c.name.toLowerCase());
-    const toAdd=IMPORT_CLIENTS.filter(c=>!existingNames.includes(c.name.toLowerCase()));
-    if(!toAdd.length){ toast('All clients already exist — nothing to import.'); return; }
-    if(!confirm(`Import ${toAdd.length} new client(s) into the planner?\n\n${toAdd.map(c=>'• '+c.name).join('\n')}`)) return;
-    Spin.on();
-    try{
-      for(const c of toAdd){
-        const id=U.uuid();
-        const client={id,name:c.name,factories:c.factories,userIds:[]};
-        await fbSet(`clients/${id}`,client);
-        Cache.clients[id]=client;
+    // Client data is never hardcoded in source. Import from a CSV file instead.
+    // CSV format: one row per client. First column = client name, remaining columns = factory names.
+    // Example: Chaumet,HQ,RASELLI FRANCO SPA,BMC SPA
+    const input=document.createElement('input');
+    input.type='file'; input.accept='.csv,text/csv'; input.style.display='none';
+    document.body.appendChild(input);
+    input.addEventListener('change', async ()=>{
+      const file=input.files[0];
+      document.body.removeChild(input);
+      if(!file) return;
+      let text;
+      try{ text=await file.text(); } catch{ toast('Could not read file.','err'); return; }
+      const lines=text.split(/\r?\n/).filter(l=>l.trim());
+      const existingNames=Cache.clientsArr().map(c=>c.name.toLowerCase());
+      const toAdd=[];
+      for(const line of lines){
+        const cols=line.split(',').map(s=>s.trim().replace(/^"|"$/g,''));
+        const name=cols[0]; const factories=cols.slice(1).filter(Boolean);
+        if(!name||existingNames.includes(name.toLowerCase())) continue;
+        toAdd.push({name,factories});
       }
-      this._renderClients();
-      toast(`${toAdd.length} client(s) imported.`);
-    } catch(e){ toast('Import failed: '+e.message,'err'); }
-    finally{ Spin.off(); }
+      if(!toAdd.length){ toast('All clients already exist — nothing to import.'); return; }
+      if(!confirm(`Import ${toAdd.length} new client(s) from CSV?`)) return;
+      Spin.on();
+      try{
+        for(const c of toAdd){
+          const id=U.uuid();
+          const client={id,name:c.name,factories:c.factories,userIds:[]};
+          await fbSet(`clients/${id}`,client);
+          Cache.clients[id]=client;
+        }
+        this._renderClients();
+        toast(`${toAdd.length} client(s) imported.`);
+      } catch(e){ toast('Import failed: '+e.message,'err'); }
+      finally{ Spin.off(); }
+    });
+    input.click();
   },
 
   async wipeAll(){
-    if(!confirm('⚠ WIPE ALL data (users, clients, bookings, availability) permanently?\n\nThis cannot be undone.')) return;
+    const phrase=prompt('⚠ This permanently deletes ALL users, clients, bookings, and availability.\n\nType WIPE ALL DATA to confirm:');
+    if(phrase!=='WIPE ALL DATA'){ toast('Wipe cancelled — phrase did not match.'); return; }
+    // Write audit entry before any data is deleted
+    try{
+      await fbSet('audit_log/wipe_'+Date.now(),{action:'wipe_all',by:App.user?.email||'unknown',at:Date.now()});
+    } catch(e){ console.warn('Audit log write failed:',e.message); }
     Spin.on();
     try{
       await Promise.all([fbDel('users'),fbDel('clients'),fbDel('entries'),fbDel('availability')]);
@@ -1314,6 +1302,108 @@ const FB = {
 };
 
 // ════════════════════════════════════
+// EVENT BINDINGS (replaces inline onclick/onchange)
+// All handlers are attached here so the CSP can forbid unsafe-inline scripts.
+// ════════════════════════════════════
+function _bindEvents(){
+  function on(id, evt, fn){ const el=document.getElementById(id); if(el) el.addEventListener(evt,fn); }
+
+  // ── Setup screen ──
+  on('btn-setup-save',  'click', ()=>Setup.connect());
+  on('btn-setup-reset', 'click', ()=>Setup.reset());
+
+  // ── Login screen ──
+  on('btn-google-signin','click',()=>Auth.signIn());
+
+  // ── Controller calendar header ──
+  on('btn-avail-open', 'click', ()=>Avail.openBulk());
+  on('btn-go-profile', 'click', ()=>App.goProfile());
+  on('btn-signout-cal','click', ()=>Auth.signOut());
+
+  // ── Calendar navigation & views ──
+  on('btn-cal-prev','click',()=>Cal.prev());
+  on('btn-cal-next','click',()=>Cal.next());
+  on('vt-month',    'click',()=>Cal.setView('month'));
+  on('vt-week',     'click',()=>Cal.setView('week'));
+  on('vt-list',     'click',()=>Cal.setView('list'));
+
+  // ── Admin header ──
+  on('nt-tl',          'click',()=>Adm.setView('tl'));
+  on('nt-wk',          'click',()=>Adm.setView('wk'));
+  on('nt-ls',          'click',()=>Adm.setView('ls'));
+  on('btn-adm-refresh','click',()=>Adm.refresh());
+  on('btn-adm-csv',    'click',()=>Adm.exportCSV());
+  on('btn-adm-settings','click',()=>App.goSettings());
+  on('btn-signout-adm','click',()=>Auth.signOut());
+
+  // ── Admin filters ──
+  on('f-mo','change',()=>Adm.applyFilters());
+  on('f-us','change',()=>Adm.applyFilters());
+  on('f-cl','change',()=>Adm.applyFilters());
+  on('f-fa','change',()=>Adm.applyFilters());
+  on('btn-adm-clear','click',()=>Adm.clearFilters());
+  on('btn-adm-prev', 'click',()=>Adm.prev());
+  on('btn-adm-next', 'click',()=>Adm.next());
+
+  // ── Settings header ──
+  on('hdr-set-back', 'click',()=>App.goBack());
+  on('btn-signout-set','click',()=>Auth.signOut());
+
+  // ── Settings tabs ──
+  on('stab-users',      'click',()=>Sett.tab('users'));
+  on('stab-clients',    'click',()=>Sett.tab('clients'));
+  on('stab-data',       'click',()=>Sett.tab('data'));
+  on('stab-freshbooks', 'click',()=>Sett.tab('freshbooks'));
+
+  // ── Settings actions ──
+  on('btn-invite-ctrl', 'click',()=>Sett.openInvite());
+  on('btn-import-csv',  'click',()=>Sett.bulkImport());
+  on('btn-add-client',  'click',()=>Sett.openAddClient());
+  on('btn-wipe-all',    'click',()=>Sett.wipeAll());
+  on('btn-change-cfg',  'click',()=>Setup.reset());
+  on('btn-save-profile','click',()=>Sett.saveProfile());
+
+  // ── Booking modal ──
+  on('sb-f',          'click',()=>Slot.pick('Full Day'));
+  on('sb-a',          'click',()=>Slot.pick('Half Day AM'));
+  on('sb-p',          'click',()=>Slot.pick('Half Day PM'));
+  on('ms-client',     'change',()=>Slot.onClientChange());
+  on('ms-del',        'click',()=>Slot.del());
+  on('btn-cancel-slot','click',()=>M.close('m-slot'));
+  on('btn-save-slot', 'click',()=>Slot.save());
+
+  // ── Day picker modal ──
+  on('btn-day-book', 'click',()=>{ M.close('m-day'); Slot.add(App._pendingDate); });
+  on('btn-day-avail','click',()=>{ M.close('m-day'); Avail.openForDate(App._pendingDate); });
+  on('btn-cancel-day','click',()=>M.close('m-day'));
+
+  // ── Availability modal ──
+  on('av-yes',          'click',()=>Avail.pickType('available'));
+  on('av-no',           'click',()=>Avail.pickType('unavailable'));
+  on('ma-sb-f',         'click',()=>Avail.pickSlot('Full Day'));
+  on('ma-sb-a',         'click',()=>Avail.pickSlot('Half Day AM'));
+  on('ma-sb-p',         'click',()=>Avail.pickSlot('Half Day PM'));
+  on('ma-repeat',       'change',()=>Avail.onRepeatChange());
+  on('ma-del',          'click',()=>Avail.del());
+  on('btn-cancel-avail','click',()=>M.close('m-avail'));
+  on('btn-save-avail',  'click',()=>Avail.save());
+
+  // ── User edit modal ──
+  on('btn-cancel-user','click',()=>M.close('m-user'));
+  on('btn-save-user',  'click',()=>Sett.saveUser());
+
+  // ── Invite controller modal ──
+  on('btn-cancel-invite','click',()=>M.close('m-invite'));
+  on('btn-do-invite',    'click',()=>Sett.inviteController());
+
+  // ── Client modal ──
+  on('mc-del',          'click',()=>Sett.delClient());
+  on('btn-cancel-client','click',()=>M.close('m-client'));
+  on('btn-save-client', 'click',()=>Sett.saveClient());
+}
+
+// ════════════════════════════════════
 // BOOT
 // ════════════════════════════════════
+_bindEvents();
 App.init();
