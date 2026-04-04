@@ -300,11 +300,17 @@ const App = {
   goProfile(){ this.goSettings(); },
 
   goBack(){
-    if(this.user?.role==='super_admin'){ show('adm'); Adm.init(); }
-    else{ show('cal'); }
+    if(this.user?.role==='super_admin'){
+      show('adm');
+      // Re-render without resetting month/filters: Adm.init() would jump back to today.
+      Adm._buildCountryBar(); Adm._fillFilterOpts(); Adm.applyFilters();
+    } else{ show('cal'); }
   },
 
-  goAdmin(){ show('adm'); Adm.init(); },
+  goAdmin(){
+    show('adm');
+    Adm._buildCountryBar(); Adm._fillFilterOpts(); Adm.applyFilters();
+  },
 
   async reload(){
     Spin.on();
@@ -388,13 +394,17 @@ const Cal = {
       let chips='';
       de.forEach(e=>{
         const cc=U.chipCls(e.slot);
-        chips+=`<div class="chip ${cc}" onclick="event.stopPropagation();Slot.edit('${e.id}')" title="${U.esc(e.slot+' – '+(e.clientName||'')+(e.factory?' @ '+e.factory:''))}">${U.esc(e.clientName||e.slot)}</div>`;
+        chips+=`<div class="chip ${cc}" data-eid="${U.esc(e.id)}" title="${U.esc(e.slot+' – '+(e.clientName||'')+(e.factory?' @ '+e.factory:''))}">${U.esc(e.clientName||e.slot)}</div>`;
       });
       if(hasAvail&&!hasUnavail) chips+=`<div class="av-tag av-tag-yes">✓ Available</div>`;
       if(hasUnavail) chips+=`<div class="av-tag av-tag-no">✗ Unavailable</div>`;
 
       const d=el('div',cls);
       d.innerHTML=`<div class="dn">${day}</div><div class="dslots">${chips}</div>`;
+      // Bind chip clicks via addEventListener (onclick attributes are blocked by CSP)
+      d.querySelectorAll('.chip[data-eid]').forEach(chip=>{
+        chip.addEventListener('click',ev=>{ ev.stopPropagation(); Slot.edit(chip.dataset.eid); });
+      });
       d.onclick=()=>this._dayClick(ds, de, avRules);
       grid.appendChild(d);
     }
@@ -519,9 +529,11 @@ const Cal = {
   }
 };
 
-document.addEventListener('DOMContentLoaded', () => {
-  App.init();
-});
+// NOTE: App is booted at the bottom of this file via _bindEvents() + App.init().
+// A DOMContentLoaded listener is NOT used here because the script tag is at the
+// bottom of <body>, so the DOM is fully parsed before this code runs. Adding a
+// second DOMContentLoaded handler would call App.init() twice and register a
+// duplicate onAuthStateChanged listener.
 
 // ════════════════════════════════════
 // SLOT (Booking)
@@ -781,7 +793,12 @@ const Adm = {
 
   async refresh(){
     Spin.on(); await Cache.loadAll(); Spin.off();
-    this.init(); toast('Dashboard refreshed.');
+    // Re-apply filters without resetting the current month/country — init() would call
+    // new Date() and reset the view to today, losing the admin's current position.
+    this._buildCountryBar();
+    this._fillFilterOpts();
+    this.applyFilters();
+    toast('Dashboard refreshed.');
   },
 
   _buildCountryBar(){
@@ -939,14 +956,18 @@ const Adm = {
         });
         if(hasAv&&!hasUn) dots+=`<div class="av-dot av-y" title="Available"></div>`;
         if(hasUn) dots+=`<div class="av-dot av-n" title="Unavailable"></div>`;
-        const cellClick=de.length===0?`onclick="Slot.add('${ds}','${u.uid}')" title="Add booking for ${U.esc(u.name)}" style="cursor:pointer"`:``;
-        body+=`<td class="${isT?'tc-td':isW?'wknd-col':''}"><div class="tl-cell" ${cellClick}>${dots}</div></td>`;
+        const cellAttrs=de.length===0?`data-date="${ds}" data-uid="${u.uid}" title="Add booking for ${U.esc(u.name)}" style="cursor:pointer"`:``;
+        body+=`<td class="${isT?'tc-td':isW?'wknd-col':''}"><div class="tl-cell" ${cellAttrs}>${dots}</div></td>`;
       }
       body+='</tr>';
     });
     body+='</tbody>';
 
     document.getElementById('tl-tbl').innerHTML=hdr+body;
+    // Bind empty-cell clicks (add booking) via addEventListener — onclick attributes are CSP-blocked
+    document.getElementById('tl-tbl').querySelectorAll('.tl-cell[data-date]').forEach(cell=>{
+      cell.addEventListener('click',()=>Slot.add(cell.dataset.date, cell.dataset.uid));
+    });
     const tip=document.getElementById('tip');
     document.getElementById('tl-tbl').querySelectorAll('.tl-dot').forEach(dot=>{
       dot.addEventListener('mouseenter',e=>{ tip.textContent=e.target.dataset.tip||''; tip.style.display='block'; });
@@ -987,13 +1008,17 @@ const Adm = {
         const de=eMap[u.uid+'|'+ds]||[];
         let cells='';
         de.forEach(e=>{ cells+=`<div class="tl-dot ${U.dotCls(e.slot)}" data-eid="${e.id}" style="cursor:pointer" title="${U.esc(e.slot+' – '+(e.clientName||'')+(e.factory?' @ '+e.factory:''))}"></div>`; });
-        const click=de.length===0?`onclick="Slot.add('${ds}','${u.uid}')" style="cursor:pointer" title="Add booking"`:'' ;
+        const click=de.length===0?`data-date="${ds}" data-uid="${u.uid}" style="cursor:pointer" title="Add booking"`:'' ;
         html+=`<td class="${isT?'tc-td':isW?'wknd-col':''}"><div class="tl-cell" ${click}>${cells||''}</div></td>`;
       });
       html+='</tr>';
     });
     html+='</tbody></table></div>';
     document.getElementById('wk-content').innerHTML=html;
+    // Bind empty-cell clicks (add booking) — onclick attributes are CSP-blocked
+    document.getElementById('wk-content').querySelectorAll('.tl-cell[data-date]').forEach(cell=>{
+      cell.addEventListener('click',()=>Slot.add(cell.dataset.date, cell.dataset.uid));
+    });
     // Bind dot clicks
     document.getElementById('wk-content').querySelectorAll('.tl-dot[data-eid]').forEach(dot=>{
       dot.addEventListener('click',e=>{ e.stopPropagation(); Slot.edit(e.target.dataset.eid); });
@@ -1006,10 +1031,14 @@ const Adm = {
     const sorted=[...f].sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
     let html='<div style="overflow-x:auto"><table class="ltab"><thead><tr><th>Date</th><th>Controller</th><th>Country</th><th>Slot</th><th>Client</th><th>Factory</th><th>Exp. Qty</th><th>Final Qty</th><th>Notes</th></tr></thead><tbody>';
     sorted.forEach(e=>{
-      html+=`<tr style="cursor:pointer" onclick="Slot.edit('${e.id}')" title="Click to edit"><td><strong>${U.fmt(e.date)}</strong></td><td>${U.flag(e.userCountry)} ${U.esc(e.userName)}</td><td>${U.esc(e.userCountry)}</td><td><span class="badge ${U.badgeCls(e.slot)}">${U.esc(e.slot)}</span></td><td>${U.esc(e.clientName)}</td><td>${U.esc(e.factory)}</td><td style="text-align:right">${e.expectedQty!=null?e.expectedQty:'<span style="color:var(--txs)">—</span>'}</td><td style="text-align:right">${e.finalQty!=null?e.finalQty:'<span style="color:var(--txs)">—</span>'}</td><td style="color:var(--txs);font-size:.76rem">${U.esc(e.notes)}</td></tr>`;
+      html+=`<tr style="cursor:pointer" data-eid="${e.id}" title="Click to edit"><td><strong>${U.fmt(e.date)}</strong></td><td>${U.flag(e.userCountry)} ${U.esc(e.userName)}</td><td>${U.esc(e.userCountry)}</td><td><span class="badge ${U.badgeCls(e.slot)}">${U.esc(e.slot)}</span></td><td>${U.esc(e.clientName)}</td><td>${U.esc(e.factory)}</td><td style="text-align:right">${e.expectedQty!=null?e.expectedQty:'<span style="color:var(--txs)">—</span>'}</td><td style="text-align:right">${e.finalQty!=null?e.finalQty:'<span style="color:var(--txs)">—</span>'}</td><td style="color:var(--txs);font-size:.76rem">${U.esc(e.notes)}</td></tr>`;
     });
     html+='</tbody></table></div>';
     document.getElementById('ls-content').innerHTML=html;
+    // Bind row clicks — onclick attributes are CSP-blocked in dynamically generated HTML
+    document.getElementById('ls-content').querySelectorAll('tr[data-eid]').forEach(row=>{
+      row.addEventListener('click',()=>Slot.edit(row.dataset.eid));
+    });
   },
 
   exportCSV(){
@@ -1047,8 +1076,15 @@ const Sett = {
     document.getElementById('u-tbody').innerHTML=users.map(u=>{
       const uClients=Cache.clientsArr().filter(c=>(c.userIds||[]).includes(u.uid)).map(c=>U.esc(c.name)).join(', ')||'<span style="color:var(--txs)">none</span>';
       const statusBadge=u.pending?'<span class="badge" style="background:#f59e0b;color:#fff">Pending</span>':`<span class="badge ${u.active?'b-on':'b-off'}">${u.active?'Active':'Inactive'}</span>`;
-      return `<tr><td><strong>${U.esc(u.name||u.email.split('@')[0])}</strong></td><td style="font-size:.76rem">${U.esc(u.email)}</td><td>${u.country?U.flag(u.country)+' '+U.esc(u.country):'<span style="color:var(--txs)">—</span>'}</td><td style="font-size:.76rem">${uClients}</td><td>${statusBadge}</td><td style="white-space:nowrap"><button class="btn btn-s btn-sm" onclick="Sett.editUser('${u.uid}')">Edit</button> <button class="btn btn-d btn-sm" onclick="Sett.deleteUser('${u.uid}')">Delete</button></td></tr>`;
+      return `<tr><td><strong>${U.esc(u.name||u.email.split('@')[0])}</strong></td><td style="font-size:.76rem">${U.esc(u.email)}</td><td>${u.country?U.flag(u.country)+' '+U.esc(u.country):'<span style="color:var(--txs)">—</span>'}</td><td style="font-size:.76rem">${uClients}</td><td>${statusBadge}</td><td style="white-space:nowrap"><button class="btn btn-s btn-sm" data-action="edit" data-uid="${U.esc(u.uid)}">Edit</button> <button class="btn btn-d btn-sm" data-action="delete" data-uid="${U.esc(u.uid)}">Delete</button></td></tr>`;
     }).join('');
+    // Bind buttons — onclick attributes in innerHTML are blocked by CSP
+    document.getElementById('u-tbody').querySelectorAll('button[data-action]').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        if(btn.dataset.action==='edit') Sett.editUser(btn.dataset.uid);
+        else if(btn.dataset.action==='delete') Sett.deleteUser(btn.dataset.uid);
+      });
+    });
   },
 
   openInvite(){
@@ -1160,8 +1196,12 @@ const Sett = {
     document.getElementById('c-tbody').innerHTML=clients.map(c=>{
       const facs=(c.factories||[]).join(', ')||'—';
       const auds=(c.userIds||[]).map(uid=>Cache.users[uid]?.name||'').filter(Boolean).join(', ')||'—';
-      return `<tr><td><strong>${U.esc(c.name)}</strong></td><td style="font-size:.76rem;color:var(--txs)">${U.esc(facs)}</td><td style="font-size:.76rem">${U.esc(auds)}</td><td><button class="btn btn-s btn-sm" onclick="Sett.editClient('${c.id}')">Edit</button></td></tr>`;
+      return `<tr><td><strong>${U.esc(c.name)}</strong></td><td style="font-size:.76rem;color:var(--txs)">${U.esc(facs)}</td><td style="font-size:.76rem">${U.esc(auds)}</td><td><button class="btn btn-s btn-sm" data-cid="${U.esc(c.id)}">Edit</button></td></tr>`;
     }).join('');
+    // Bind edit buttons — onclick attributes in innerHTML are blocked by CSP
+    document.getElementById('c-tbody').querySelectorAll('button[data-cid]').forEach(btn=>{
+      btn.addEventListener('click',()=>Sett.editClient(btn.dataset.cid));
+    });
   },
 
   openAddClient(){

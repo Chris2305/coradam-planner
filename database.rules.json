@@ -2,8 +2,8 @@
   "rules": {
     ".read": "auth != null && auth.token.email.matches(/.*@coradam\\.com$/)",
     "freshbooks": {
-      ".read":  "auth != null && auth.token.email === 'c.nocher@coradam.com'",
-      ".write": "auth != null && auth.token.email === 'c.nocher@coradam.com'"
+      ".read":  "auth != null && (auth.token.email === 'c.nocher@coradam.com' || root.child('users').child(auth.uid).child('role').val() === 'super_admin')",
+      ".write": "auth != null && (auth.token.email === 'c.nocher@coradam.com' || root.child('users').child(auth.uid).child('role').val() === 'super_admin')"
     },
     "users": {
       "$uid": {

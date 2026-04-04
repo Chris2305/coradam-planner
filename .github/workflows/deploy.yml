@@ -31,4 +31,4 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./
           publish_branch: gh-pages
-          exclude_assets: '.github,inject_config.py,functions,firebase.json,.firebaserc,database.rules.json,FRESHBOOKS_SETUP.md,import-clients.html'
+          exclude_assets: '.github,inject_config.py,functions,firebase.json,.firebaserc,database.rules.json,FRESHBOOKS_SETUP.md,SECURITY_AUDIT.md,import-clients.html'
