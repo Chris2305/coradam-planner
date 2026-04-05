@@ -962,6 +962,44 @@ const Adm = {
 
   _render(){ if(this.view==='tl') this._renderTl(); else if(this.view==='wk') this._renderWk(); else this._renderList(); },
 
+  // ── Per-half-day state resolver ─────────────────────────────────────────
+  // Returns the dominant state for either the AM or PM half of a given cell.
+  // Priority: booking > unavailable > available > empty
+  _halfState(de, av, isAm){
+    const sh=isAm?'Half Day AM':'Half Day PM';
+    const bF=de.find(e=>e.slot==='Full Day');
+    const bH=de.find(e=>e.slot===sh);
+    if(bF) return {type:'booked',slot:'Full Day',e:bF};
+    if(bH) return {type:'booked',slot:sh,e:bH};
+    const uF=av.find(r=>r.type==='unavailable'&&r.slot==='Full Day');
+    const uH=av.find(r=>r.type==='unavailable'&&r.slot===sh);
+    if(uF||uH) return {type:'unavail',r:uF||uH};
+    const aF=av.find(r=>r.type==='available'&&r.slot==='Full Day');
+    const aH=av.find(r=>r.type==='available'&&r.slot===sh);
+    if(aF||aH) return {type:'avail',r:aF||aH};
+    return {type:'empty'};
+  },
+
+  // ── Half-day HTML builder ────────────────────────────────────────────────
+  // Renders one horizontal bar (AM or PM) for the timeline cell.
+  _halfHtml(st, isAm, ds, uid){
+    const sl=isAm?'AM':'PM'; const sd=isAm?'Half Day AM':'Half Day PM';
+    let cls='tl-half', tip='', eid='';
+    if(st.type==='booked'){
+      cls+=st.slot==='Full Day'?' tl-h-bk-f':isAm?' tl-h-bk-a':' tl-h-bk-p';
+      tip=`${U.esc(st.e.slot)} – ${U.esc(st.e.clientName||'')}${st.e.factory?' @ '+U.esc(st.e.factory):''}${st.e.expectedQty!=null?' | Exp: '+st.e.expectedQty:''}${st.e.finalQty!=null?' | Final: '+st.e.finalQty:''}`;
+      eid=st.e.id;
+    } else if(st.type==='unavail'){
+      cls+=' tl-h-un'; tip=`${sl}: Unavailable${st.r&&st.r.note?' — '+U.esc(st.r.note):''}`;
+    } else if(st.type==='avail'){
+      cls+=' tl-h-av'; tip=`${sl}: Available${st.r&&st.r.note?' — '+U.esc(st.r.note):''}`;
+    } else {
+      cls+=' tl-h-empty'; tip=`Add booking — ${sl}`;
+    }
+    const attrs=eid?`data-eid="${eid}"`:`data-date="${ds}" data-uid="${uid}"`;
+    return `<div class="${cls}" ${attrs} title="${tip.replace(/"/g,'&quot;')}"></div>`;
+  },
+
   _renderTl(){
     const y=this.cur.getFullYear(), m=this.cur.getMonth();
     const dCount=U.daysInMonth(y,m), today=U.today();
@@ -1012,33 +1050,31 @@ const Adm = {
         const isT=ds===today, isW=U.isWeekend(y,m,d);
         const de=eMap[u.uid+'|'+ds]||[];
         const av=aMap[u.uid+'|'+ds]||[];
-        const hasAv=av.some(r=>r.type==='available'), hasUn=av.some(r=>r.type==='unavailable');
-        let dots='';
-        de.forEach(e=>{
-          const dc=U.dotCls(e.slot);
-          const tip=`${U.esc(u.name)}: ${U.esc(e.slot)} – ${U.esc(e.clientName||'')} @ ${U.esc(e.factory||'')}${e.expectedQty!=null?' | Exp: '+e.expectedQty:''}${e.finalQty!=null?' | Final: '+e.finalQty:''}`;
-          dots+=`<div class="tl-dot ${dc}" data-tip="${tip.replace(/"/g,'&quot;')}" data-eid="${e.id}" style="cursor:pointer"></div>`;
-        });
-        if(hasAv&&!hasUn) dots+=`<div class="av-dot av-y" title="Available"></div>`;
-        if(hasUn) dots+=`<div class="av-dot av-n" title="Unavailable"></div>`;
-        const cellAttrs=de.length===0?`data-date="${ds}" data-uid="${u.uid}" title="Add booking for ${U.esc(u.name)}" style="cursor:pointer"`:``;
-        body+=`<td class="${isT?'tc-td':isW?'wknd-col':''}"><div class="tl-cell" ${cellAttrs}>${dots}</div></td>`;
+        // Build AM and PM half states independently (booking > unavail > avail > empty)
+        const amSt=this._halfState(de,av,true), pmSt=this._halfState(de,av,false);
+        const amH=this._halfHtml(amSt,true,ds,u.uid), pmH=this._halfHtml(pmSt,false,ds,u.uid);
+        body+=`<td class="${isT?'tc-td':isW?'wknd-col':''}"><div class="tl-cell">${amH}${pmH}</div></td>`;
       }
       body+='</tr>';
     });
     body+='</tbody>';
 
     document.getElementById('tl-tbl').innerHTML=hdr+body;
-    // Bind empty-cell clicks (add booking) via addEventListener — onclick attributes are CSP-blocked
-    document.getElementById('tl-tbl').querySelectorAll('.tl-cell[data-date]').forEach(cell=>{
-      cell.addEventListener('click',()=>Slot.add(cell.dataset.date, cell.dataset.uid));
-    });
+    const tbl=document.getElementById('tl-tbl');
     const tip=document.getElementById('tip');
-    document.getElementById('tl-tbl').querySelectorAll('.tl-dot').forEach(dot=>{
-      dot.addEventListener('mouseenter',e=>{ tip.textContent=e.target.dataset.tip||''; tip.style.display='block'; });
-      dot.addEventListener('mousemove',e=>{ tip.style.left=(e.clientX+12)+'px'; tip.style.top=(e.clientY-10)+'px'; });
-      dot.addEventListener('mouseleave',()=>{ tip.style.display='none'; });
-      dot.addEventListener('click',e=>{ e.stopPropagation(); tip.style.display='none'; Slot.edit(e.target.dataset.eid); });
+    // Booked halves → open edit modal
+    tbl.querySelectorAll('.tl-half[data-eid]').forEach(h=>{
+      h.addEventListener('click',e=>{ e.stopPropagation(); tip.style.display='none'; Slot.edit(h.dataset.eid); });
+    });
+    // Empty halves → open add-booking modal
+    tbl.querySelectorAll('.tl-half[data-date]').forEach(h=>{
+      h.addEventListener('click',()=>Slot.add(h.dataset.date, h.dataset.uid));
+    });
+    // Tooltip for all halves (available/unavailable show info only)
+    tbl.querySelectorAll('.tl-half').forEach(h=>{
+      h.addEventListener('mouseenter',()=>{ if(h.title){ tip.textContent=h.title; tip.style.display='block'; } });
+      h.addEventListener('mousemove',e=>{ tip.style.left=(e.clientX+12)+'px'; tip.style.top=(e.clientY-10)+'px'; });
+      h.addEventListener('mouseleave',()=>{ tip.style.display='none'; });
     });
   },
 
@@ -1059,6 +1095,13 @@ const Adm = {
     // Build entry map
     const eMap={};
     Cache.entriesArr().forEach(e=>{ const k=e.userId+'|'+e.date; (eMap[k]=eMap[k]||[]).push(e); });
+    // Build availability map for the 7 displayed days
+    const weekDates=days.map(d=>d.toISOString().slice(0,10));
+    const aMap={};
+    Cache.availArr().forEach(rule=>{
+      const months=[...new Set(weekDates.map(d=>d.slice(0,7)))];
+      months.forEach(mk=>{ const[my,mm]=mk.split('-').map(Number); U.expandAvail(rule,my,mm-1).forEach(date=>{ if(weekDates.includes(date)){ const k=rule.userId+'|'+date; (aMap[k]=aMap[k]||[]).push(rule); } }); });
+    });
     if(!allUsers.length){ document.getElementById('wk-content').innerHTML='<div style="padding:2rem;text-align:center;color:var(--txs)">No controllers for this filter.</div>'; return; }
     let html='<div style="overflow-x:auto"><table class="tl" style="min-width:700px"><thead><tr><th style="text-align:left;padding:.4rem .6rem;min-width:110px">Controller</th>';
     days.forEach((d,i)=>{ const ds=d.toISOString().slice(0,10); const isT=ds===today,isW=d.getDay()===0||d.getDay()===6; html+=`<th class="${isT?'tc-td':isW?'wknd-col':''}">${WDAYS[i]}<br>${d.getDate()}</th>`; });
@@ -1071,22 +1114,30 @@ const Adm = {
         const ds=d.toISOString().slice(0,10);
         const isT=ds===today, isW=d.getDay()===0||d.getDay()===6;
         const de=eMap[u.uid+'|'+ds]||[];
-        let cells='';
-        de.forEach(e=>{ cells+=`<div class="tl-dot ${U.dotCls(e.slot)}" data-eid="${e.id}" style="cursor:pointer" title="${U.esc(e.slot+' – '+(e.clientName||'')+(e.factory?' @ '+e.factory:''))}"></div>`; });
-        const click=de.length===0?`data-date="${ds}" data-uid="${u.uid}" style="cursor:pointer" title="Add booking"`:'' ;
-        html+=`<td class="${isT?'tc-td':isW?'wknd-col':''}"><div class="tl-cell" ${click}>${cells||''}</div></td>`;
+        const av=aMap[u.uid+'|'+ds]||[];
+        const amSt=this._halfState(de,av,true), pmSt=this._halfState(de,av,false);
+        const amH=this._halfHtml(amSt,true,ds,u.uid), pmH=this._halfHtml(pmSt,false,ds,u.uid);
+        html+=`<td class="${isT?'tc-td':isW?'wknd-col':''}"><div class="tl-cell">${amH}${pmH}</div></td>`;
       });
       html+='</tr>';
     });
     html+='</tbody></table></div>';
     document.getElementById('wk-content').innerHTML=html;
-    // Bind empty-cell clicks (add booking) — onclick attributes are CSP-blocked
-    document.getElementById('wk-content').querySelectorAll('.tl-cell[data-date]').forEach(cell=>{
-      cell.addEventListener('click',()=>Slot.add(cell.dataset.date, cell.dataset.uid));
+    const wkc=document.getElementById('wk-content');
+    const wkTip=document.getElementById('tip');
+    // Booked halves → edit modal
+    wkc.querySelectorAll('.tl-half[data-eid]').forEach(h=>{
+      h.addEventListener('click',e=>{ e.stopPropagation(); wkTip.style.display='none'; Slot.edit(h.dataset.eid); });
     });
-    // Bind dot clicks
-    document.getElementById('wk-content').querySelectorAll('.tl-dot[data-eid]').forEach(dot=>{
-      dot.addEventListener('click',e=>{ e.stopPropagation(); Slot.edit(e.target.dataset.eid); });
+    // Empty halves → add booking modal
+    wkc.querySelectorAll('.tl-half[data-date]').forEach(h=>{
+      h.addEventListener('click',()=>Slot.add(h.dataset.date, h.dataset.uid));
+    });
+    // Tooltip on all halves
+    wkc.querySelectorAll('.tl-half').forEach(h=>{
+      h.addEventListener('mouseenter',()=>{ if(h.title){ wkTip.textContent=h.title; wkTip.style.display='block'; } });
+      h.addEventListener('mousemove',e=>{ wkTip.style.left=(e.clientX+12)+'px'; wkTip.style.top=(e.clientY-10)+'px'; });
+      h.addEventListener('mouseleave',()=>{ wkTip.style.display='none'; });
     });
   },
 
