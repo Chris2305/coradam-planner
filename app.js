@@ -266,7 +266,12 @@ const App = {
         }
         this.user=profile;
         this._afterLogin();
-      } catch(e){ toast('Load error: '+e.message,'err'); }
+      } catch(e){
+        // Include error code when available (e.g. PERMISSION_DENIED, auth/unauthorized-domain)
+        const code = e.code ? ' ['+e.code+']' : '';
+        toast('Load error: '+e.message+code,'err');
+        console.error('[Coradam] onAuthStateChanged error:', e);
+      }
       finally{ Spin.off(); }
     });
   },
