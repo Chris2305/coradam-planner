@@ -80,11 +80,22 @@ const LS = {
 // ════════════════════════════════════
 let fapp, fauth, fdb;
 function fbRef(path){ return fdb.ref(path); }
-async function fbGet(path){ const s=await fbRef(path).get(); return s.val(); }
-async function fbSet(path,val){ await fbRef(path).set(val); }
-async function fbUpdate(path,val){ await fbRef(path).update(val); }
-async function fbDel(path){ await fbRef(path).remove(); }
-async function fbPush(path,val){ const r=fbRef(path).push(); await r.set({...val,id:r.key}); return r.key; }
+
+// Wraps any Firebase promise in a 15-second timeout so a broken or
+// stalled connection surfaces as a clear error instead of an infinite spinner.
+const FB_TIMEOUT_MS = 15000;
+function fbTimeout(promise){
+  return Promise.race([
+    promise,
+    new Promise((_,reject)=>setTimeout(()=>reject(new Error('Firebase request timed out. Please check your connection and try again.')),FB_TIMEOUT_MS))
+  ]);
+}
+
+async function fbGet(path){ const s=await fbTimeout(fbRef(path).get()); return s.val(); }
+async function fbSet(path,val){ await fbTimeout(fbRef(path).set(val)); }
+async function fbUpdate(path,val){ await fbTimeout(fbRef(path).update(val)); }
+async function fbDel(path){ await fbTimeout(fbRef(path).remove()); }
+async function fbPush(path,val){ const r=fbRef(path).push(); await fbTimeout(r.set({...val,id:r.key})); return r.key; }
 
 // ════════════════════════════════════
 // IN-MEMORY CACHE
@@ -314,10 +325,12 @@ const App = {
 
   async reload(){
     Spin.on();
-    await Cache.loadAll();
-    // Re-read current user profile
-    if(this.user) this.user=Cache.users[this.user.uid]||this.user;
-    Spin.off();
+    try{
+      await Cache.loadAll();
+      // Re-read current user profile
+      if(this.user) this.user=Cache.users[this.user.uid]||this.user;
+    } catch(e){ toast('Reload failed: '+e.message,'err'); }
+    finally{ Spin.off(); }
   }
 };
 
@@ -792,13 +805,18 @@ const Adm = {
   },
 
   async refresh(){
-    Spin.on(); await Cache.loadAll(); Spin.off();
-    // Re-apply filters without resetting the current month/country — init() would call
-    // new Date() and reset the view to today, losing the admin's current position.
-    this._buildCountryBar();
-    this._fillFilterOpts();
-    this.applyFilters();
-    toast('Dashboard refreshed.');
+    // Use try/finally so Spin.off() is guaranteed even if Cache.loadAll() rejects or times out.
+    Spin.on();
+    try{
+      await Cache.loadAll();
+      // Re-apply filters without resetting the current month/country — init() would call
+      // new Date() and reset the view to today, losing the admin's current position.
+      this._buildCountryBar();
+      this._fillFilterOpts();
+      this.applyFilters();
+      toast('Dashboard refreshed.');
+    } catch(e){ toast('Refresh failed: '+e.message,'err'); }
+    finally{ Spin.off(); }
   },
 
   _buildCountryBar(){
