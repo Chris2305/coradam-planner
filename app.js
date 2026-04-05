@@ -202,6 +202,30 @@ const App = {
     fapp = firebase.apps.length ? firebase.app() : firebase.initializeApp(cfg);
     fauth=firebase.auth();
     fdb=firebase.database();
+    // Early RTDB connectivity check — surfaces a clear error within 5s if the
+    // database is unreachable (not created, wrong URL, or network blocked).
+    // Firebase's .info/connected is a WebSocket-based indicator; if it doesn't
+    // fire true within 5 seconds the database endpoint is likely invalid.
+    (function(){
+      const dbUrl = cfg.databaseURL || '(missing databaseURL)';
+      let seen = false;
+      const timer = setTimeout(()=>{
+        if(!seen){
+          const err = document.getElementById('login-err');
+          if(err){
+            err.innerHTML = '<strong>Cannot reach Firebase database.</strong><br>URL: <code>'+U.esc(dbUrl)+'</code><br>Please verify this matches <em>Firebase Console → Realtime Database</em> and that the database has been created.';
+            err.style.display = 'block';
+          }
+          console.error('[Coradam] RTDB unreachable after 5s. databaseURL:', dbUrl);
+        }
+      }, 5000);
+      fdb.ref('.info/connected').on('value', snap=>{
+        seen = true;
+        clearTimeout(timer);
+        console.log('[Coradam] RTDB connected:', snap.val(), '| databaseURL:', dbUrl);
+        fdb.ref('.info/connected').off('value');
+      });
+    })();
     // Detect Freshbooks OAuth callback redirect
     const _fbParam=new URLSearchParams(window.location.search).get('fb');
     if(_fbParam) history.replaceState({},'',window.location.pathname);
