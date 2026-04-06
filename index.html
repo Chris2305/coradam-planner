@@ -310,7 +310,48 @@
     <input type="hidden" id="ms-id">
     <input type="hidden" id="ms-for">
     <div id="ms-for-name" style="display:none;font-size:.8rem;color:var(--txs);margin-bottom:.6rem;padding:.3rem .5rem;background:var(--bg);border-radius:var(--r)">👤 Booking for: <strong id="ms-for-label"></strong></div>
-    <div class="fg"><label class="lbl">Date</label><input type="date" id="ms-date" class="inp"></div>
+    <!-- Date — hidden in range/weekdays modes -->
+    <div id="ms-single-date" class="fg">
+      <label class="lbl">Date</label>
+      <input type="date" id="ms-date" class="inp">
+    </div>
+
+    <!-- Recurrence (Add mode only — hidden in Edit) -->
+    <div id="ms-recur-wrap">
+      <div class="fg">
+        <label class="lbl">Repeat <span class="lbl-opt">(opt.)</span></label>
+        <select id="ms-repeat" class="sel">
+          <option value="none">No repeat — single date</option>
+          <option value="range">Date range — consecutive days</option>
+          <option value="weekly">Weekly — same weekday, every week</option>
+          <option value="weekdays">Custom days — choose weekdays + period</option>
+          <option value="monthly">Monthly — same date each month</option>
+        </select>
+      </div>
+      <div id="ms-rdate-range" style="display:none">
+        <div class="row2">
+          <div class="fg"><label class="lbl">From</label><input type="date" id="ms-from" class="inp"></div>
+          <div class="fg"><label class="lbl">To</label><input type="date" id="ms-to" class="inp"></div>
+        </div>
+      </div>
+      <div id="ms-runtil-wrap" style="display:none" class="fg">
+        <label class="lbl">Repeat until</label>
+        <input type="date" id="ms-until" class="inp">
+      </div>
+      <div id="ms-rwd-wrap" style="display:none" class="fg">
+        <label class="lbl">Days of the week</label>
+        <div class="wd-btns" id="ms-wd-btns">
+          <button class="wd-btn" data-wd="0">Mon</button>
+          <button class="wd-btn" data-wd="1">Tue</button>
+          <button class="wd-btn" data-wd="2">Wed</button>
+          <button class="wd-btn" data-wd="3">Thu</button>
+          <button class="wd-btn" data-wd="4">Fri</button>
+          <button class="wd-btn" data-wd="5">Sat</button>
+          <button class="wd-btn" data-wd="6">Sun</button>
+        </div>
+      </div>
+    </div>
+
     <div class="fg">
       <label class="lbl">Time slot</label>
       <div class="slot-btns">

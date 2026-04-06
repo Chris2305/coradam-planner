@@ -597,7 +597,11 @@ const Slot = {
     this._reset();
     document.getElementById('ms-title').textContent='Add Booking';
     document.getElementById('ms-date').value=date||U.today();
+    // Pre-fill range start date so the user doesn't have to re-enter it when switching modes
+    document.getElementById('ms-from').value=date||U.today();
     document.getElementById('ms-del').style.display='none';
+    // Show recurrence panel in add mode
+    document.getElementById('ms-recur-wrap').style.display='block';
     const targetUid=forUid||App.user.uid;
     this._setForUser(targetUid);
     this._fillClients(targetUid,'','');
@@ -614,6 +618,9 @@ const Slot = {
     document.getElementById('ms-eqty').value=e.expectedQty!=null?e.expectedQty:'';
     document.getElementById('ms-fqty').value=e.finalQty!=null?e.finalQty:'';
     document.getElementById('ms-del').style.display='inline-flex';
+    // Hide recurrence in edit mode — edits always affect a single occurrence
+    document.getElementById('ms-recur-wrap').style.display='none';
+    document.getElementById('btn-save-slot').textContent='Save booking';
     this.pick(e.slot);
     this._setForUser(e.userId);
     this._fillClients(e.userId||App.user.uid, e.clientId||'', e.factory||'');
@@ -627,10 +634,13 @@ const Slot = {
     else document.getElementById('sb-p').classList.add('on-pm');
   },
   _reset(){
-    ['ms-id','ms-date','ms-notes','ms-eqty','ms-fqty'].forEach(id=>document.getElementById(id).value='');
+    ['ms-id','ms-date','ms-notes','ms-eqty','ms-fqty','ms-from','ms-to','ms-until'].forEach(id=>document.getElementById(id).value='');
     document.getElementById('ms-type').value='';
+    document.getElementById('ms-repeat').value='none';
     document.getElementById('ms-err').style.display='none';
     ['sb-f','sb-a','sb-p'].forEach(id=>document.getElementById(id).className='slt-btn');
+    document.querySelectorAll('#ms-wd-btns .wd-btn').forEach(b=>b.classList.remove('on'));
+    this.onRepeatChange(); // resets sub-section visibility and button label
   },
   _fillClients(uid,selCid,selFac){
     const clients=Cache.clientsFor(uid);
@@ -647,37 +657,143 @@ const Slot = {
     if(selFac&&!(c.factories||[]).includes(selFac)) fs.innerHTML+=`<option value="${U.esc(selFac)}" selected>${U.esc(selFac)}</option>`;
   },
   onClientChange(){ this._fillFacs(document.getElementById('ms-client').value,''); },
+
+  // ── Recurrence UI visibility ──────────────────────────────────────────
+  onRepeatChange(){
+    const v=document.getElementById('ms-repeat').value;
+    const hasRange=v==='range'||v==='weekdays';
+    document.getElementById('ms-single-date').style.display=hasRange?'none':'block';
+    document.getElementById('ms-rdate-range').style.display=hasRange?'block':'none';
+    document.getElementById('ms-runtil-wrap').style.display=(v==='weekly'||v==='monthly')?'block':'none';
+    document.getElementById('ms-rwd-wrap').style.display=v==='weekdays'?'block':'none';
+    document.getElementById('btn-save-slot').textContent=v==='none'?'Save booking':'Create bookings';
+  },
+
+  // ── Date expansion for recurring bookings ─────────────────────────────
+  // Returns an array of ISO date strings based on the current repeat mode.
+  _expandDates(){
+    const v=document.getElementById('ms-repeat').value;
+    const date=document.getElementById('ms-date').value;
+    const from=document.getElementById('ms-from').value;
+    const to=document.getElementById('ms-to').value;
+    const until=document.getElementById('ms-until').value;
+    const wdSel=[...document.querySelectorAll('#ms-wd-btns .wd-btn.on')].map(b=>+b.dataset.wd);
+    // Parse a YYYY-MM-DD string in local time (avoids UTC midnight off-by-one)
+    const parseD=s=>{ const[y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d); };
+    const fmt=d=>`${d.getFullYear()}-${S2(d.getMonth()+1)}-${S2(d.getDate())}`;
+    if(v==='none') return date?[date]:[];
+    if(v==='range'){
+      const dates=[]; let d=parseD(from); const end=parseD(to);
+      while(d<=end){ dates.push(fmt(d)); d.setDate(d.getDate()+1); }
+      return dates;
+    }
+    if(v==='weekly'){
+      const dates=[]; let d=parseD(date); const end=parseD(until);
+      while(d<=end){ dates.push(fmt(d)); d.setDate(d.getDate()+7); }
+      return dates;
+    }
+    if(v==='monthly'){
+      const dates=[]; let d=parseD(date); const end=parseD(until);
+      while(d<=end){ dates.push(fmt(d)); d.setMonth(d.getMonth()+1); }
+      return dates;
+    }
+    if(v==='weekdays'){
+      // wdSel uses Monday-first: 0=Mon … 6=Sun; JS getDay(): 0=Sun 1=Mon … 6=Sat
+      const dates=[]; let d=parseD(from); const end=parseD(to);
+      while(d<=end){
+        const dow=d.getDay(); const mf=dow===0?6:dow-1;
+        if(wdSel.includes(mf)) dates.push(fmt(d));
+        d.setDate(d.getDate()+1);
+      }
+      return dates;
+    }
+    return [];
+  },
   async save(){
     const id=document.getElementById('ms-id').value;
     const date=document.getElementById('ms-date').value;
+    const repeat=document.getElementById('ms-repeat').value;
+    const from=document.getElementById('ms-from').value;
+    const to=document.getElementById('ms-to').value;
+    const until=document.getElementById('ms-until').value;
     const type=document.getElementById('ms-type').value;
     const cid=document.getElementById('ms-client').value;
     const fac=document.getElementById('ms-factory').value;
     const eqty=U.int(document.getElementById('ms-eqty').value);
     const fqty=U.int(document.getElementById('ms-fqty').value);
     const notes=document.getElementById('ms-notes').value.trim();
+    const wdSel=[...document.querySelectorAll('#ms-wd-btns .wd-btn.on')];
     const err=document.getElementById('ms-err');
     err.style.display='none';
-    if(!date){err.textContent='Please select a date.';err.style.display='block';return;}
-    if(!type){err.textContent='Please select a time slot.';err.style.display='block';return;}
-    if(!cid){err.textContent='Please select a client.';err.style.display='block';return;}
-    if(!fac){err.textContent='Please select a factory.';err.style.display='block';return;}
-    // Determine target user (admin books for pre-set controller, others for themselves)
+
+    // ── Date validation (mode-aware) ─────────────────────────────────────
+    const needsRange=repeat==='range'||repeat==='weekdays';
+    const needsUntil=repeat==='weekly'||repeat==='monthly';
+    if(!needsRange&&!date){ err.textContent='Please select a date.'; err.style.display='block'; return; }
+    if(needsRange){
+      if(!from){ err.textContent='Please select a start date.'; err.style.display='block'; return; }
+      if(!to){ err.textContent='Please select an end date.'; err.style.display='block'; return; }
+      if(to<from){ err.textContent='End date must be after start date.'; err.style.display='block'; return; }
+    }
+    if(needsUntil){
+      if(!until){ err.textContent='Please fill in "Repeat until".'; err.style.display='block'; return; }
+      if(until<date){ err.textContent='"Repeat until" must be on or after the start date.'; err.style.display='block'; return; }
+    }
+    if(repeat==='weekdays'&&!wdSel.length){ err.textContent='Please select at least one day of the week.'; err.style.display='block'; return; }
+
+    // ── Slot / client / factory ──────────────────────────────────────────
+    if(!type){ err.textContent='Please select a time slot.'; err.style.display='block'; return; }
+    if(!cid){ err.textContent='Please select a client.'; err.style.display='block'; return; }
+    if(!fac){ err.textContent='Please select a factory.'; err.style.display='block'; return; }
+
     const targetUid=document.getElementById('ms-for').value||App.user.uid;
     const targetUser=Cache.users[targetUid]||App.user;
     const c=Cache.clients[cid];
-    const conflict=Cache.entriesArr().find(e=>e.id!==id&&e.userId===targetUid&&e.date===date&&e.slot===type);
-    if(conflict){err.textContent=`${targetUser.name} already has a "${type}" on this date.`;err.style.display='block';return;}
+
+    // ── Single-entry path (edit or no-repeat add) ────────────────────────
+    if(id||repeat==='none'){
+      const conflict=Cache.entriesArr().find(e=>e.id!==id&&e.userId===targetUid&&e.date===date&&e.slot===type);
+      if(conflict){ err.textContent=`${targetUser.name} already has a "${type}" on this date.`; err.style.display='block'; return; }
+      Spin.on();
+      try{
+        const eid=id||U.uuid();
+        const base=id?{...Cache.entries[id]}:{};
+        const entry={...base,id:eid,userId:targetUid,userName:targetUser.name,userEmail:targetUser.email,userCountry:targetUser.country||'',date,slot:type,clientId:cid,clientName:c?.name||'',factory:fac,expectedQty:eqty,finalQty:fqty,notes,updated:Date.now(),created:base.created||Date.now()};
+        await fbSet(`entries/${eid}`,entry); Cache.entries[eid]=entry;
+        M.close('m-slot');
+        if(this._isAdmin()){ Adm.refresh(); } else { Cal.render(); }
+        toast(id?'Booking updated.':'Booking saved.');
+      } catch(e){ toast('Save failed: '+e.message,'err'); }
+      finally{ Spin.off(); }
+      return;
+    }
+
+    // ── Recurring path ───────────────────────────────────────────────────
+    const dates=this._expandDates();
+    if(!dates.length){ err.textContent='No dates generated — check your recurrence settings.'; err.style.display='block'; return; }
+    if(dates.length>365){ err.textContent=`Too many occurrences (${dates.length}). Shorten the period.`; err.style.display='block'; return; }
+
+    // Partition into skip (conflict) vs create
+    const toCreate=[], skipped=[];
+    for(const d of dates){
+      if(Cache.entriesArr().find(e=>e.userId===targetUid&&e.date===d&&e.slot===type)) skipped.push(d);
+      else toCreate.push(d);
+    }
+    if(!toCreate.length){ err.textContent=`All ${dates.length} date${dates.length>1?'s':''} already have a "${type}" booking.`; err.style.display='block'; return; }
+
     Spin.on();
     try{
-      const eid=id||U.uuid();
-      const base=id?{...Cache.entries[id]}:{};
-      const entry={...base,id:eid,userId:targetUid,userName:targetUser.name,userEmail:targetUser.email,userCountry:targetUser.country||'',date,slot:type,clientId:cid,clientName:c?.name||'',factory:fac,expectedQty:eqty,finalQty:fqty,notes,updated:Date.now(),created:base.created||Date.now()};
-      await fbSet(`entries/${eid}`,entry);
-      Cache.entries[eid]=entry;
+      for(const d of toCreate){
+        const eid=U.uuid();
+        const entry={id:eid,userId:targetUid,userName:targetUser.name,userEmail:targetUser.email,userCountry:targetUser.country||'',date:d,slot:type,clientId:cid,clientName:c?.name||'',factory:fac,expectedQty:eqty,finalQty:fqty,notes,updated:Date.now(),created:Date.now()};
+        await fbSet(`entries/${eid}`,entry); Cache.entries[eid]=entry;
+      }
       M.close('m-slot');
       if(this._isAdmin()){ Adm.refresh(); } else { Cal.render(); }
-      toast(id?'Booking updated.':'Booking saved.');
+      const msg=skipped.length
+        ?`${toCreate.length} booking${toCreate.length>1?'s':''} created. ${skipped.length} skipped (conflict).`
+        :`${toCreate.length} booking${toCreate.length>1?'s':''} created.`;
+      toast(msg);
     } catch(e){ toast('Save failed: '+e.message,'err'); }
     finally{ Spin.off(); }
   },
@@ -1506,9 +1622,12 @@ function _bindEvents(){
   on('sb-a',          'click',()=>Slot.pick('Half Day AM'));
   on('sb-p',          'click',()=>Slot.pick('Half Day PM'));
   on('ms-client',     'change',()=>Slot.onClientChange());
+  on('ms-repeat',     'change',()=>Slot.onRepeatChange());
   on('ms-del',        'click',()=>Slot.del());
   on('btn-cancel-slot','click',()=>M.close('m-slot'));
   on('btn-save-slot', 'click',()=>Slot.save());
+  // Weekday toggle buttons (Mon–Sun)
+  document.querySelectorAll('#ms-wd-btns .wd-btn').forEach(b=>b.addEventListener('click',()=>b.classList.toggle('on')));
 
   // ── Day picker modal ──
   on('btn-day-book', 'click',()=>{ M.close('m-day'); Slot.add(App._pendingDate); });

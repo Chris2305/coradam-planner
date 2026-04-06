@@ -57,6 +57,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .av-btn.on-yes{border-color:#16a34a;background:#f0fdf4;color:#166534}
 .av-btn.on-no{border-color:#dc2626;background:#fef2f2;color:#991b1b}
 
+/* Weekday picker (booking recurrence) */
+.wd-btns{display:flex;gap:.28rem}
+.wd-btn{flex:1;padding:.38rem .2rem;border:1.5px solid var(--bdr);border-radius:var(--r);background:#fff;cursor:pointer;font-size:.72rem;font-weight:700;text-align:center;color:var(--txs);transition:all .13s;min-width:0}
+.wd-btn:hover{border-color:var(--pl);color:var(--p)}
+.wd-btn.on{background:var(--p);color:#fff;border-color:var(--p)}
+
 /* Calendar */
 .cal-wrap{padding:1rem 1.2rem;max-width:920px;margin:0 auto}
 .cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:.9rem;gap:.5rem}
