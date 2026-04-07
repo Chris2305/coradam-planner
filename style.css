@@ -155,14 +155,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .tl-half:hover{filter:brightness(.86)}
 /* Booking states */
 .tl-h-bk-f{background:var(--full)}
-.tl-h-bk-a{background:var(--am)}
-.tl-h-bk-p{background:var(--pm)}
+.tl-h-bk-a{background:var(--full)} /* Half AM booked: same blue as Full Day */
+.tl-h-bk-p{background:var(--full)} /* Half PM booked: same blue as Full Day */
 /* Availability states */
 .tl-h-av{background:#86efac;cursor:default}
 .tl-h-un{background:#fca5a5;cursor:default}
 /* Empty — click to add */
 .tl-h-empty{background:rgba(0,0,0,.05)}
 .tl-h-empty:hover{filter:none;background:rgba(59,130,246,.16)}
+.tl-h-hol{background:#fb923c;cursor:default} /* Holiday (orange) */
+.tl-h-sick{background:#f472b6;cursor:default} /* Sick day (pink) */
 .tc-td{background:#eef0fb!important}
 .tl th.tc-td{color:var(--p)}
 .wknd-col{background:#fafafa}
@@ -929,3 +931,14 @@ code{background:#f1f5f9;border:1px solid var(--bdr);border-radius:4px;padding:1p
 .doc-item-name:hover{text-decoration:underline}
 .docs-upload-btn{display:inline-flex;align-items:center;gap:.35rem;cursor:pointer;user-select:none}
 .doc-status{font-size:.76rem;color:var(--txs);margin-top:.35rem;min-height:1.1em}
+
+/* Off-Day modal list */
+.od-list{display:flex;flex-direction:column;gap:.4rem;max-height:200px;overflow-y:auto;margin-top:.4rem}
+.od-item{display:flex;align-items:center;gap:.55rem;padding:.32rem .5rem;background:var(--bg);border-radius:5px;font-size:.8rem}
+.od-icon{flex-shrink:0;font-size:.9rem}
+.od-range{font-weight:600;flex:1;white-space:nowrap}
+.od-type-tag{font-size:.7rem;padding:.12rem .38rem;border-radius:20px;font-weight:700;flex-shrink:0}
+.od-type-hol{background:#ffedd5;color:#c2410c}
+.od-type-sick{background:#fce7f3;color:#9d174d}
+.od-note-txt{color:var(--txs);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.76rem}
+.od-sep{border-top:1px solid var(--bdr);margin:.75rem 0 .5rem}

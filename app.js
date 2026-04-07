@@ -1108,16 +1108,26 @@ const Adm = {
 
   // ── Per-half-day state resolver ─────────────────────────────────────────
   // Returns the dominant state for either the AM or PM half of a given cell.
-  // Priority: booking > unavailable > available > empty
+  // Priority: booking > absence > (other-half-booked → green) > unavailable > available > empty
   _halfState(de, av, isAm){
-    const sh=isAm?'Half Day AM':'Half Day PM';
-    const bF=de.find(e=>e.slot==='Full Day');
-    const bH=de.find(e=>e.slot===sh);
+    const sh   = isAm ? 'Half Day AM' : 'Half Day PM';
+    const otSh = isAm ? 'Half Day PM' : 'Half Day AM';
+    const bF    = de.find(e=>e.slot==='Full Day');
+    const bH    = de.find(e=>e.slot===sh);
+    const bOth  = de.find(e=>e.slot===otSh);
+    // 1. Booking on this half (or full day)
     if(bF) return {type:'booked',slot:'Full Day',e:bF};
     if(bH) return {type:'booked',slot:sh,e:bH};
+    // 2. Absence (holiday/sick) when this half is otherwise free
+    const absence=av.find(r=>r.type==='absence');
+    if(absence) return {type:'absence',absenceType:absence.absenceType,r:absence};
+    // 3. If the opposite half is booked → show this half as available (slot is open)
+    if(bOth) return {type:'avail'};
+    // 4. Unavailability rule
     const uF=av.find(r=>r.type==='unavailable'&&r.slot==='Full Day');
     const uH=av.find(r=>r.type==='unavailable'&&r.slot===sh);
     if(uF||uH) return {type:'unavail',r:uF||uH};
+    // 5. Availability rule
     const aF=av.find(r=>r.type==='available'&&r.slot==='Full Day');
     const aH=av.find(r=>r.type==='available'&&r.slot===sh);
     if(aF||aH) return {type:'avail',r:aF||aH};
@@ -1127,12 +1137,17 @@ const Adm = {
   // ── Half-day HTML builder ────────────────────────────────────────────────
   // Renders one horizontal bar (AM or PM) for the timeline cell.
   _halfHtml(st, isAm, ds, uid){
-    const sl=isAm?'AM':'PM'; const sd=isAm?'Half Day AM':'Half Day PM';
+    const sl=isAm?'AM':'PM';
     let cls='tl-half', tip='', eid='';
     if(st.type==='booked'){
-      cls+=st.slot==='Full Day'?' tl-h-bk-f':isAm?' tl-h-bk-a':' tl-h-bk-p';
+      // All bookings (Full Day / Half AM / Half PM) use the same blue colour
+      cls+=' tl-h-bk-f';
       tip=`${U.esc(st.e.slot)} – ${U.esc(st.e.clientName||'')}${st.e.factory?' @ '+U.esc(st.e.factory):''}${st.e.expectedQty!=null?' | Exp: '+st.e.expectedQty:''}${st.e.finalQty!=null?' | Final: '+st.e.finalQty:''}`;
       eid=st.e.id;
+    } else if(st.type==='absence'){
+      cls+=st.absenceType==='holiday'?' tl-h-hol':' tl-h-sick';
+      const icon=st.absenceType==='holiday'?'🏖':'🤒';
+      tip=`${sl}: ${icon} ${st.absenceType==='holiday'?'Holiday':'Sick day'}${st.r?.note?' — '+U.esc(st.r.note):''}`;
     } else if(st.type==='unavail'){
       cls+=' tl-h-un'; tip=`${sl}: Unavailable${st.r&&st.r.note?' — '+U.esc(st.r.note):''}`;
     } else if(st.type==='avail'){
@@ -1406,6 +1421,32 @@ const Sett = {
     M.open('m-user');
   },
 
+  // ── Sync weeklyAvail template to real availability rules ─────────────────
+  // Creates/replaces one "weekly" repeat rule per active weekday (Mon–Fri).
+  // These rules are tagged fromWeeklyAvail:true so they can be cleanly replaced.
+  // Start dates: week of 2020-01-06 (Mon) so every weekday since then is covered.
+  // repeatUntil: today + 10 years (≈ the default requested).
+  async _syncWeeklyAvailRules(uid, weeklyAvail){
+    const u=Cache.users[uid];
+    // Delete all previous auto-generated rules for this user
+    const old=Cache.availArr().filter(r=>r.userId===uid&&r.fromWeeklyAvail);
+    for(const r of old){ await fbDel(`availability/${r.id}`); delete Cache.availability[r.id]; }
+    // Build new rules (Mon=0 … Fri=4, Monday-first index)
+    const BASE=['2020-01-06','2020-01-07','2020-01-08','2020-01-09','2020-01-10'];
+    const until=new Date(); until.setFullYear(until.getFullYear()+10);
+    const repeatUntil=`${until.getFullYear()}-${S2(until.getMonth()+1)}-${S2(until.getDate())}`;
+    for(let i=0;i<5;i++){
+      const wa=weeklyAvail[i];
+      if(!wa||(!wa.am&&!wa.pm)) continue; // weekday disabled — skip
+      const slot=(wa.am&&wa.pm)?'Full Day':wa.am?'Half Day AM':'Half Day PM';
+      const id=U.uuid();
+      const rule={id,userId:uid,userName:u?.name||'',type:'available',slot,
+                  startDate:BASE[i],repeatMode:'weekly',repeatUntil,
+                  note:'',fromWeeklyAvail:true,created:Date.now()};
+      await fbSet(`availability/${id}`,rule); Cache.availability[id]=rule;
+    }
+  },
+
   async saveUser(){
     const uid=document.getElementById('mu-uid').value;
     const country=document.getElementById('mu-country').value;
@@ -1425,6 +1466,8 @@ const Sett = {
       // Update user country + weeklyAvail
       const u={...Cache.users[uid],country,weeklyAvail};
       await fbSet(`users/${uid}`,u); Cache.users[uid]=u;
+      // Sync weekly availability rules (creates repeating "available" rules for 10 years)
+      await this._syncWeeklyAvailRules(uid, weeklyAvail);
       // Update client assignments
       for(const c of Cache.clientsArr()){
         const wasIn=(c.userIds||[]).includes(uid);
@@ -1435,7 +1478,7 @@ const Sett = {
           await fbSet(`clients/${c.id}`,updated); Cache.clients[c.id]=updated;
         }
       }
-      M.close('m-user'); this._renderUsers(); toast('Controller updated.');
+      M.close('m-user'); this._renderUsers(); toast('Controller updated — availability rules applied for 10 years.');
     } catch(e){ log.error('saveUser error',e); err.textContent='Save failed: '+(e?.message||e); err.style.display='block'; }
     finally{ Spin.off(); }
   },
@@ -1628,6 +1671,102 @@ const FB = {
   async _import(){},
   async _generate(){},
   async _callWorker(){ throw new Error('Freshbooks integration not active'); }
+};
+
+// ════════════════════════════════════
+// OFF DAY — Holiday & Sick Day management (Super Admin only)
+// Stored in `availability` collection with type:'absence'.
+// Rendered as orange (holiday) or pink (sick) bars in the timeline.
+// ════════════════════════════════════
+const OffDay = {
+  open(){
+    const sel=document.getElementById('od-uid');
+    const users=Cache.usersArr().filter(u=>u.role==='controller'&&u.active).sort((a,b)=>a.name.localeCompare(b.name));
+    sel.innerHTML='<option value="">Select controller…</option>'+users.map(u=>`<option value="${U.esc(u.uid)}">${U.esc(u.name)}</option>`).join('');
+    // Reset new-entry fields
+    document.getElementById('od-type').value='';
+    document.getElementById('od-from').value='';
+    document.getElementById('od-to').value='';
+    document.getElementById('od-note').value='';
+    document.getElementById('od-err').style.display='none';
+    ['od-hol','od-sick'].forEach(id=>document.getElementById(id).classList.remove('on'));
+    this._renderList();
+    M.open('m-offday');
+  },
+
+  pickType(t){
+    document.getElementById('od-type').value=t;
+    document.getElementById('od-hol').classList.toggle('on',t==='holiday');
+    document.getElementById('od-sick').classList.toggle('on',t==='sick');
+  },
+
+  _renderList(){
+    const uid=document.getElementById('od-uid').value;
+    const list=document.getElementById('od-list');
+    if(!uid){ list.innerHTML='<div class="no-items">Select a controller to view their off days.</div>'; return; }
+    const absences=Cache.availArr()
+      .filter(r=>r.userId===uid&&r.type==='absence')
+      .sort((a,b)=>a.startDate.localeCompare(b.startDate));
+    if(!absences.length){ list.innerHTML='<div class="no-items">No off days recorded for this controller.</div>'; return; }
+    list.innerHTML='<div class="od-list">'+absences.map(a=>{
+      const isHol=a.absenceType==='holiday';
+      const icon=isHol?'🏖':'🤒';
+      const label=isHol?'Holiday':'Sick day';
+      const tagCls=isHol?'od-type-hol':'od-type-sick';
+      const range=(a.endDate&&a.endDate!==a.startDate)?`${U.fmt(a.startDate)} → ${U.fmt(a.endDate)}`:U.fmt(a.startDate);
+      return `<div class="od-item"><span class="od-icon">${icon}</span><span class="od-range">${range}</span><span class="od-type-tag ${tagCls}">${label}</span><span class="od-note-txt">${U.esc(a.note||'')}</span><button class="btn btn-d btn-sm" data-aid="${U.esc(a.id)}">✕</button></div>`;
+    }).join('')+'</div>';
+    list.querySelectorAll('button[data-aid]').forEach(btn=>{
+      btn.addEventListener('click',()=>this.del(btn.dataset.aid));
+    });
+  },
+
+  async del(id){
+    if(!confirm('Delete this off day record?')) return;
+    Spin.on();
+    try{
+      await fbDel(`availability/${id}`); delete Cache.availability[id];
+      this._renderList();
+      Adm.refresh();
+      toast('Off day deleted.');
+    } catch(e){ toast('Delete failed: '+e.message,'err'); }
+    finally{ Spin.off(); }
+  },
+
+  async save(){
+    const uid=document.getElementById('od-uid').value;
+    const type=document.getElementById('od-type').value;
+    const from=document.getElementById('od-from').value;
+    const to=document.getElementById('od-to').value;
+    const note=document.getElementById('od-note').value.trim();
+    const err=document.getElementById('od-err');
+    err.style.display='none';
+    if(!uid){ err.textContent='Please select a controller.'; err.style.display='block'; return; }
+    if(!type){ err.textContent='Please select a type — Holiday or Sick Day.'; err.style.display='block'; return; }
+    if(!from){ err.textContent='Please select a start date.'; err.style.display='block'; return; }
+    if(!to){ err.textContent='Please select an end date.'; err.style.display='block'; return; }
+    if(to<from){ err.textContent='End date must be on or after the start date.'; err.style.display='block'; return; }
+    const u=Cache.users[uid];
+    const id=U.uuid();
+    const record={id,userId:uid,userName:u?.name||'',type:'absence',absenceType:type,
+                  slot:'Full Day',startDate:from,endDate:to,repeatMode:'none',
+                  note,fromOffDay:true,created:Date.now()};
+    Spin.on();
+    try{
+      await fbSet(`availability/${id}`,record); Cache.availability[id]=record;
+      // Reset entry fields (keep controller selected)
+      document.getElementById('od-type').value='';
+      document.getElementById('od-from').value='';
+      document.getElementById('od-to').value='';
+      document.getElementById('od-note').value='';
+      ['od-hol','od-sick'].forEach(id=>document.getElementById(id).classList.remove('on'));
+      this._renderList();
+      Adm.refresh();
+      const days=(new Date(to)-new Date(from))/86400000+1;
+      toast(`${days} day${days>1?'s':''} of ${type==='holiday'?'holiday':'sick leave'} recorded for ${u?.name||uid}.`);
+    } catch(e){ err.textContent='Save failed: '+e.message; err.style.display='block'; }
+    finally{ Spin.off(); }
+  }
 };
 
 // ════════════════════════════════════
@@ -1966,6 +2105,7 @@ function _bindEvents(){
   on('nt-ls',          'click',()=>Adm.setView('ls'));
   on('nt-rp',          'click',()=>Adm.setView('rp'));
   on('btn-adm-refresh','click',()=>Adm.refresh());
+  on('btn-adm-offday', 'click',()=>OffDay.open());
   on('btn-rp-apply',   'click',()=>Rpt.render());
   on('btn-adm-csv',    'click',()=>Adm.exportCSV());
   on('btn-adm-settings','click',()=>App.goSettings());
@@ -2038,6 +2178,13 @@ function _bindEvents(){
   on('mc-del',          'click',()=>Sett.delClient());
   on('btn-cancel-client','click',()=>M.close('m-client'));
   on('btn-save-client', 'click',()=>Sett.saveClient());
+
+  // ── Off Day modal ──
+  on('btn-cancel-offday','click',()=>M.close('m-offday'));
+  on('btn-save-offday',  'click',()=>OffDay.save());
+  on('od-hol',           'click',()=>OffDay.pickType('holiday'));
+  on('od-sick',          'click',()=>OffDay.pickType('sick'));
+  on('od-uid',           'change',()=>OffDay._renderList());
 }
 
 // ════════════════════════════════════
