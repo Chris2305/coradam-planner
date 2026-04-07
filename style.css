@@ -876,3 +876,33 @@ code{background:#f1f5f9;border:1px solid var(--bdr);border-radius:4px;padding:1p
 
 /* Modal footer top margin (compact dialogs) */
 .mfoot-mt         { margin-top: .75rem; }
+
+/* ── Reports view ─────────────────────────── */
+.rp-toolbar{display:flex;align-items:flex-end;gap:.75rem;padding:1rem 0 .75rem;flex-wrap:wrap}
+.rp-tb-grp{display:flex;flex-direction:column;gap:.28rem}
+.rp-section{margin-bottom:1rem}
+.rp-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem}
+@media(max-width:720px){.rp-grid{grid-template-columns:1fr}}
+.rp-card{background:var(--card);border-radius:var(--r);box-shadow:var(--sh);padding:1.1rem 1.25rem}
+.rp-card-t{font-size:.88rem;font-weight:700;color:var(--tx);margin-bottom:.9rem}
+.rp-util-legend{display:flex;align-items:center;gap:.75rem;margin-bottom:.8rem;font-size:.76rem;color:var(--txs)}
+.rp-leg-dot{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:.2rem;vertical-align:middle}
+.rp-leg-full{background:var(--full)}
+.rp-leg-am{background:var(--am)}
+.rp-leg-pm{background:var(--pm)}
+.rp-util-row{display:flex;align-items:center;gap:.6rem;margin-bottom:.55rem}
+.rp-util-name{font-size:.8rem;color:var(--tx);width:110px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rp-util-bar-wrap{flex:1;display:flex;align-items:center;gap:.5rem}
+.rp-util-bar{flex:1;height:14px;background:var(--bg);border-radius:4px;overflow:hidden;display:flex}
+.rp-seg{height:100%}
+.rp-seg-f{background:var(--full)}
+.rp-seg-a{background:var(--am)}
+.rp-seg-p{background:var(--pm)}
+.rp-util-pct{font-size:.74rem;color:var(--txs);width:36px;text-align:right;flex-shrink:0}
+.rp-cli-row{display:flex;align-items:center;gap:.6rem;margin-bottom:.5rem}
+.rp-cli-name{font-size:.8rem;color:var(--tx);width:130px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rp-cli-bar-wrap{flex:1;display:flex;align-items:center;gap:.5rem}
+.rp-cli-bar{height:12px;background:var(--p);border-radius:3px;min-width:2px;transition:width .2s}
+.rp-cli-val{font-size:.74rem;color:var(--txs);white-space:nowrap}
+.rp-svg{width:100%;height:auto;display:block}
+.rpc-t{font-size:10px;fill:var(--txs);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
