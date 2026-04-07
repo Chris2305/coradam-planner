@@ -160,6 +160,7 @@
       <div class="hdr-actions hdr-actions-user">
         <button class="btn btn-g btn-sm" id="btn-adm-refresh">↻</button>
         <button class="btn btn-g btn-sm" id="btn-adm-csv">⬆ CSV</button>
+        <button class="btn btn-g btn-sm" id="btn-adm-offday">🏖 Off Day</button>
         <button class="btn btn-g btn-sm" id="btn-adm-settings">⚙ Settings</button>
         <img id="adm-avatar" class="hdr-avatar d-none" src="" alt="">
         <button class="btn btn-g btn-sm" id="btn-signout-adm">Sign out</button>
@@ -212,11 +213,11 @@
 
       <div class="leg-row">
         <span class="leg-label">Each cell: AM ▲ / PM ▼</span>
-        <div class="leg-i"><div class="leg-sw leg-sw-full"></div>Full Day booked</div>
-        <div class="leg-i"><div class="leg-sw leg-sw-am"></div>Half AM booked</div>
-        <div class="leg-i"><div class="leg-sw leg-sw-pm"></div>Half PM booked</div>
+        <div class="leg-i"><div class="leg-sw" style="background:var(--full)"></div>Booked (any slot)</div>
         <div class="leg-i"><div class="leg-sw leg-sw-avail"></div>Available</div>
         <div class="leg-i"><div class="leg-sw leg-sw-unavail"></div>Unavailable</div>
+        <div class="leg-i"><div class="leg-sw" style="background:#fb923c"></div>Holiday</div>
+        <div class="leg-i"><div class="leg-sw" style="background:#f472b6"></div>Sick day</div>
         <div class="leg-i"><div class="leg-sw leg-sw-free"></div>Free — click to book</div>
       </div>
     </div>
@@ -590,6 +591,43 @@
       <button class="btn btn-s" id="btn-cancel-client">Cancel</button>
       <button class="btn btn-p" id="btn-save-client">Save</button>
     </div>
+  </div>
+</div>
+
+<!-- Off Day modal (Super Admin only) -->
+<div class="mov" id="m-offday">
+  <div class="modal modal-lg">
+    <div class="mtitle">Off Day — Holiday &amp; Sick Days</div>
+
+    <div class="fg">
+      <label class="lbl">Controller</label>
+      <select id="od-uid" class="sel"><option value="">Select controller…</option></select>
+    </div>
+
+    <div class="fg">
+      <label class="lbl">Type</label>
+      <div class="avail-btns">
+        <button class="av-btn" id="od-hol">🏖 Holiday</button>
+        <button class="av-btn" id="od-sick">🤒 Sick Day</button>
+      </div>
+      <input type="hidden" id="od-type">
+    </div>
+
+    <div class="row2">
+      <div class="fg"><label class="lbl">From</label><input type="date" id="od-from" class="inp"></div>
+      <div class="fg"><label class="lbl">To</label><input type="date" id="od-to" class="inp"></div>
+    </div>
+    <div class="fg"><label class="lbl">Note <span class="lbl-opt">(opt.)</span></label><input type="text" id="od-note" class="inp" placeholder="e.g. Summer holidays, Food poisoning…"></div>
+    <div id="od-err" class="err-msg"></div>
+
+    <div class="mfoot">
+      <button class="btn btn-s" id="btn-cancel-offday">Cancel</button>
+      <button class="btn btn-p" id="btn-save-offday">Save Off Day</button>
+    </div>
+
+    <div class="od-sep"></div>
+    <div class="lbl">Recorded off days</div>
+    <div id="od-list" style="margin-top:.4rem"></div>
   </div>
 </div>
 
