@@ -974,6 +974,7 @@ const Adm = {
     this._buildCountryBar();
     this._fillFilterOpts();
     this.applyFilters();
+    Rpt.init();
   },
 
   async refresh(){
@@ -986,6 +987,7 @@ const Adm = {
       this._buildCountryBar();
       this._fillFilterOpts();
       this.applyFilters();
+      if(this.view==='rp') Rpt.render();
       toast('Dashboard refreshed.');
     } catch(e){ toast('Refresh failed: '+e.message,'err'); }
     finally{ Spin.off(); }
@@ -1013,11 +1015,17 @@ const Adm = {
 
   setView(v){
     this.view=v;
-    document.getElementById('vw-tl').style.display=v==='tl'?'block':'none';
-    document.getElementById('vw-wk').style.display=v==='wk'?'block':'none';
-    document.getElementById('vw-ls').style.display=v==='ls'?'block':'none';
-    ['tl','wk','ls'].forEach(id=>document.getElementById('nt-'+id).className='ntab'+(v===id?' on':''));
-    this._render();
+    ['tl','wk','ls','rp'].forEach(id=>{
+      const vEl=document.getElementById('vw-'+id);
+      if(vEl) vEl.style.display=v===id?'block':'none';
+      const tEl=document.getElementById('nt-'+id);
+      if(tEl) tEl.className='ntab'+(v===id?' on':'');
+    });
+    const isRp=v==='rp';
+    document.getElementById('adm-fbar').style.display  = isRp?'none':'';
+    document.getElementById('adm-stats').style.display = isRp?'none':'';
+    document.getElementById('country-bar').style.display = isRp?'none':'';
+    if(isRp){ Rpt.render(); } else { this._render(); }
   },
 
   prev(){
@@ -1583,6 +1591,158 @@ const FB = {
 };
 
 // ════════════════════════════════════
+// REPORTS (Super Admin only)
+// Charts use CSS bars + raw SVG — no external CDN required (CSP restriction).
+// ════════════════════════════════════
+const Rpt = {
+  init(){
+    const y = new Date().getFullYear();
+    const sel = document.getElementById('rp-year');
+    if(!sel) return;
+    sel.innerHTML = '';
+    for(let i=y-3; i<=y+1; i++){
+      const opt = document.createElement('option');
+      opt.value = i; opt.textContent = i;
+      if(i===y) opt.selected = true;
+      sel.appendChild(opt);
+    }
+    document.getElementById('rp-month').value = '0';
+  },
+
+  render(){
+    const year  = +document.getElementById('rp-year').value;
+    const month = +document.getElementById('rp-month').value; // 0 = full year
+    this._renderUtil(year, month);
+    this._renderClients(year, month);
+    this._renderQtyTrend(year, month);
+  },
+
+  // Count Mon–Fri working days in a given month (m = 0-based JS month)
+  _wDays(y, m){
+    let n=0; const d=new Date(y,m,1);
+    while(d.getMonth()===m){ const dow=d.getDay(); if(dow!==0&&dow!==6) n++; d.setDate(d.getDate()+1); }
+    return n;
+  },
+
+  // Entries matching the selected year (+ month if not 0)
+  _entries(y, mo){
+    return Cache.entriesArr().filter(e=>{
+      if(!e.date) return false;
+      const [ey,em]=e.date.split('-').map(Number);
+      if(ey!==y) return false;
+      if(mo!==0 && em!==mo) return false;
+      return true;
+    });
+  },
+
+  _renderUtil(y, mo){
+    const entries = this._entries(y, mo);
+    const totalWD = mo===0
+      ? Array.from({length:12},(_,i)=>this._wDays(y,i)).reduce((s,n)=>s+n,0)
+      : this._wDays(y, mo-1);
+    const controllers = Cache.usersArr()
+      .filter(u=>u.role==='controller'&&u.active)
+      .sort((a,b)=>a.name.localeCompare(b.name));
+
+    let html='';
+    controllers.forEach(u=>{
+      const ue = entries.filter(e=>e.userId===u.uid);
+      const full  = ue.filter(e=>e.slot==='Full Day').length;
+      const am    = ue.filter(e=>e.slot==='Half Day AM').length;
+      const pm    = ue.filter(e=>e.slot==='Half Day PM').length;
+      const total = full + (am+pm)*0.5;
+      const pct   = totalWD ? Math.min(100,(total/totalWD)*100) : 0;
+      const fPct  = totalWD ? Math.min(100,(full/totalWD)*100) : 0;
+      const aPct  = totalWD ? Math.min(100,(am*0.5/totalWD)*100) : 0;
+      const pPct  = totalWD ? Math.min(100,(pm*0.5/totalWD)*100) : 0;
+      html+=`<div class="rp-util-row">`+
+        `<div class="rp-util-name" title="${U.esc(u.name)}">${U.esc(u.name)}</div>`+
+        `<div class="rp-util-bar-wrap">`+
+          `<div class="rp-util-bar">`+
+            `<div class="rp-seg rp-seg-f" style="width:${fPct.toFixed(1)}%"></div>`+
+            `<div class="rp-seg rp-seg-a" style="width:${aPct.toFixed(1)}%"></div>`+
+            `<div class="rp-seg rp-seg-p" style="width:${pPct.toFixed(1)}%"></div>`+
+          `</div>`+
+          `<div class="rp-util-pct">${Math.round(pct)}%</div>`+
+        `</div>`+
+      `</div>`;
+    });
+    document.getElementById('rp-util-body').innerHTML = html || '<div class="no-items">No data for this period.</div>';
+  },
+
+  _renderClients(y, mo){
+    const entries = this._entries(y, mo);
+    const map={};
+    entries.forEach(e=>{
+      const cn=e.clientName||'(unknown)';
+      map[cn]=(map[cn]||0)+(e.slot==='Full Day'?1:0.5);
+    });
+    const sorted=Object.entries(map).sort((a,b)=>b[1]-a[1]);
+    const max=sorted.length?sorted[0][1]:1;
+    let html='';
+    sorted.forEach(([name,days])=>{
+      const pct=(days/max)*100;
+      const val=days%1===0?days:days.toFixed(1);
+      html+=`<div class="rp-cli-row">`+
+        `<div class="rp-cli-name" title="${U.esc(name)}">${U.esc(name)}</div>`+
+        `<div class="rp-cli-bar-wrap">`+
+          `<div class="rp-cli-bar" style="width:${pct.toFixed(1)}%"></div>`+
+          `<div class="rp-cli-val">${val}d</div>`+
+        `</div>`+
+      `</div>`;
+    });
+    document.getElementById('rp-cli-body').innerHTML = html || '<div class="no-items">No bookings for this period.</div>';
+  },
+
+  _renderQtyTrend(y, mo){
+    const months = mo===0 ? Array.from({length:12},(_,i)=>i+1) : [mo];
+    const allE = Cache.entriesArr().filter(e=>e.date&&e.date.startsWith(y+'-'));
+    const MLBL=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const data = months.map(m=>{
+      const mk=`${y}-${S2(m)}`;
+      const me=allE.filter(e=>e.date.startsWith(mk));
+      return { label:MLBL[m-1], exp:me.reduce((s,e)=>s+(e.expectedQty||0),0), fin:me.reduce((s,e)=>s+(e.finalQty||0),0) };
+    });
+    document.getElementById('rp-trend-body').innerHTML = this._lineChart(data);
+  },
+
+  _lineChart(data){
+    const hasQty = data.some(d=>d.exp||d.fin);
+    if(!hasQty) return '<div class="no-items">No quantity data for this period.</div>';
+    const W=480, H=200, padL=44, padR=16, padT=12, padB=36;
+    const cW=W-padL-padR, cH=H-padT-padB;
+    const allV=data.flatMap(d=>[d.exp,d.fin]).filter(v=>v>0);
+    const maxY=allV.length ? Math.ceil(Math.max(...allV)*1.15/10)*10||10 : 10;
+    const n=data.length;
+    const xPos=i=>padL+(n===1?cW/2:i*(cW/(n-1)));
+    const yPos=v=>padT+cH-(v/maxY)*cH;
+
+    // Horizontal grid lines
+    let grid='';
+    for(let i=0;i<=4;i++){
+      const val=(maxY/4)*i, y=yPos(val);
+      grid+=`<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="#e2e8f0" stroke-width="1"/>`;
+      grid+=`<text x="${padL-4}" y="${y+4}" text-anchor="end" class="rpc-t">${Math.round(val)}</text>`;
+    }
+    const xlabels=data.map((d,i)=>`<text x="${xPos(i)}" y="${H-padB+14}" text-anchor="middle" class="rpc-t">${d.label}</text>`).join('');
+    const pts=key=>data.map((d,i)=>`${xPos(i)},${yPos(d[key])}`).join(' ');
+    const expLine=`<polyline points="${pts('exp')}" fill="none" stroke="#191d64" stroke-width="2" stroke-dasharray="5,3"/>`;
+    const finLine=`<polyline points="${pts('fin')}" fill="none" stroke="#10b981" stroke-width="2.5"/>`;
+    let dots='';
+    data.forEach((d,i)=>{
+      dots+=`<circle cx="${xPos(i)}" cy="${yPos(d.exp)}" r="3" fill="#191d64"/>`;
+      dots+=`<circle cx="${xPos(i)}" cy="${yPos(d.fin)}" r="3" fill="#10b981"/>`;
+    });
+    const lY=H-4;
+    const leg=`<line x1="${padL}" y1="${lY}" x2="${padL+20}" y2="${lY}" stroke="#191d64" stroke-width="2" stroke-dasharray="5,3"/>`+
+      `<text x="${padL+24}" y="${lY+4}" class="rpc-t">Expected</text>`+
+      `<line x1="${padL+95}" y1="${lY}" x2="${padL+115}" y2="${lY}" stroke="#10b981" stroke-width="2.5"/>`+
+      `<text x="${padL+119}" y="${lY+4}" class="rpc-t">Final</text>`;
+    return `<svg viewBox="0 0 ${W} ${H}" class="rp-svg">${grid}${xlabels}${expLine}${finLine}${dots}${leg}</svg>`;
+  }
+};
+
+// ════════════════════════════════════
 // EVENT BINDINGS (replaces inline onclick/onchange)
 // All handlers are attached here so the CSP can forbid unsafe-inline scripts.
 // ════════════════════════════════════
@@ -1612,7 +1772,9 @@ function _bindEvents(){
   on('nt-tl',          'click',()=>Adm.setView('tl'));
   on('nt-wk',          'click',()=>Adm.setView('wk'));
   on('nt-ls',          'click',()=>Adm.setView('ls'));
+  on('nt-rp',          'click',()=>Adm.setView('rp'));
   on('btn-adm-refresh','click',()=>Adm.refresh());
+  on('btn-rp-apply',   'click',()=>Rpt.render());
   on('btn-adm-csv',    'click',()=>Adm.exportCSV());
   on('btn-adm-settings','click',()=>App.goSettings());
   on('btn-signout-adm','click',()=>Auth.signOut());
