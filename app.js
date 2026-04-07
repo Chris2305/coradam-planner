@@ -1398,8 +1398,8 @@ const Sett = {
     const clients=Cache.clientsArr();
     document.getElementById('mu-clients').innerHTML=clients.length?clients.map(c=>`<label class="chk-item"><input type="checkbox" value="${c.id}" ${(c.userIds||[]).includes(uid)?'checked':''}>${U.esc(c.name)}</label>`).join(''):'<div class="no-items">No clients yet.</div>';
     // Build weekly availability grid (Mon=0 … Fri=4, Monday-first convention)
-    const wa=u.weeklyAvail||{0:{am:true,pm:true},1:{am:true,pm:true},2:{am:true,pm:true},3:{am:true,pm:true},4:{am:true,pm:true}};
-    const DAYS=['Mon','Tue','Wed','Thu','Fri'];
+    const wa=u.weeklyAvail||{0:{am:true,pm:true},1:{am:true,pm:true},2:{am:true,pm:true},3:{am:true,pm:true},4:{am:true,pm:true},5:{am:false,pm:false},6:{am:false,pm:false}};
+    const DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
     const grid=document.getElementById('mu-avail-grid');
     grid.innerHTML='';
     DAYS.forEach((lbl,i)=>{
@@ -1428,14 +1428,16 @@ const Sett = {
   // repeatUntil: today + 10 years (≈ the default requested).
   async _syncWeeklyAvailRules(uid, weeklyAvail){
     const u=Cache.users[uid];
-    // Delete all previous auto-generated rules for this user
-    const old=Cache.availArr().filter(r=>r.userId===uid&&r.fromWeeklyAvail);
+    // Delete all previous auto-generated weekly rules for this user —
+    // including untagged ones from earlier app versions that lack fromWeeklyAvail.
+    const old=Cache.availArr().filter(r=>r.userId===uid&&(r.fromWeeklyAvail||(r.type==='available'&&r.repeatMode==='weekly')));
     for(const r of old){ await fbDel(`availability/${r.id}`); delete Cache.availability[r.id]; }
     // Build new rules (Mon=0 … Fri=4, Monday-first index)
-    const BASE=['2020-01-06','2020-01-07','2020-01-08','2020-01-09','2020-01-10'];
+    // Mon–Sun anchor dates (week of 2020-01-06). Index matches DAYS in editUser.
+    const BASE=['2020-01-06','2020-01-07','2020-01-08','2020-01-09','2020-01-10','2020-01-11','2020-01-12'];
     const until=new Date(); until.setFullYear(until.getFullYear()+10);
     const repeatUntil=`${until.getFullYear()}-${S2(until.getMonth()+1)}-${S2(until.getDate())}`;
-    for(let i=0;i<5;i++){
+    for(let i=0;i<7;i++){
       const wa=weeklyAvail[i];
       if(!wa||(!wa.am&&!wa.pm)) continue; // weekday disabled — skip
       const slot=(wa.am&&wa.pm)?'Full Day':wa.am?'Half Day AM':'Half Day PM';
@@ -1971,18 +1973,21 @@ const Rpt = {
       const am     = ue.filter(e=>e.slot==='Half Day AM').length;
       const pm     = ue.filter(e=>e.slot==='Half Day PM').length;
       const booked = full + (am+pm)*0.5;
-      const fPct   = totalWD ? Math.min(100,(full/totalWD)*100) : 0;
-      const aPct   = totalWD ? Math.min(100,(am*0.5/totalWD)*100) : 0;
-      const pPct   = totalWD ? Math.min(100,(pm*0.5/totalWD)*100) : 0;
-      const bookedPct = totalWD ? Math.min(100,(booked/totalWD)*100) : 0;
       // Availability
       const availDays = (availByUser[u.uid]||new Set()).size;
-      const availPct  = totalWD ? Math.min(100,(availDays/totalWD)*100) : 0;
-      // Available-but-unbooked segment (cap at availPct, never negative)
-      const unbookedPct = Math.max(0, availPct - bookedPct);
-      const bkOfAvail = availDays ? Math.round((booked/availDays)*100) : null;
+      // Bar widths use availDays as denominator so bars are always meaningful
+      // regardless of period length (Full Year vs single month).
+      // Fall back to totalWD if no availability rules have been set yet.
+      const denom = availDays || totalWD;
+      const fPct      = denom ? Math.min(100,(full/denom)*100) : 0;
+      const aPct      = denom ? Math.min(100,(am*0.5/denom)*100) : 0;
+      const pPct      = denom ? Math.min(100,(pm*0.5/denom)*100) : 0;
+      const bookedPct = denom ? Math.min(100,(booked/denom)*100) : 0;
+      // Unbooked = remainder of available days
+      const unbookedPct = availDays ? Math.max(0, 100 - bookedPct) : 0;
+      const bkOfAvail = availDays ? Math.round(bookedPct) : null;
       const pctLabel = bkOfAvail!=null
-        ? `<span class="rp-util-pct-main">${Math.round(bookedPct)}%</span><br><span style="font-size:.66rem">${bkOfAvail}% of avail.</span>`
+        ? `<span class="rp-util-pct-main">${bkOfAvail}%</span><br><span style="font-size:.66rem">${availDays}d available</span>`
         : `<span class="rp-util-pct-main">${Math.round(bookedPct)}%</span>`;
       html+=`<div class="rp-util-row">`+
         `<div class="rp-util-name" title="${U.esc(u.name)}">${U.esc(u.name)}</div>`+
@@ -2107,6 +2112,8 @@ function _bindEvents(){
   on('btn-adm-refresh','click',()=>Adm.refresh());
   on('btn-adm-offday', 'click',()=>OffDay.open());
   on('btn-rp-apply',   'click',()=>Rpt.render());
+  on('rp-year',        'change',()=>Rpt.render());
+  on('rp-month',       'change',()=>Rpt.render());
   on('btn-adm-csv',    'click',()=>Adm.exportCSV());
   on('btn-adm-settings','click',()=>App.goSettings());
   on('btn-signout-adm','click',()=>Auth.signOut());
