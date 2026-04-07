@@ -196,7 +196,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .stabs{display:flex;border-bottom:2px solid var(--bdr);background:#fff}
 .stab{padding:.6rem 1.2rem;font-size:.82rem;font-weight:700;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;color:var(--txs);transition:all .13s}
 .stab.on{color:var(--p);border-bottom-color:var(--p)}
-.gtab{display:none}.gtab.on{display:block}
+.gtab{display:none;margin-top:1rem}.gtab.on{display:block}
 .utab{width:100%;border-collapse:collapse}
 .utab th{background:#f8fafc;padding:.5rem .9rem;text-align:left;font-size:.67rem;font-weight:800;color:var(--txs);text-transform:uppercase;border-bottom:1px solid var(--bdr)}
 .utab td{padding:.5rem .9rem;font-size:.8rem;border-bottom:1px solid var(--bdr);vertical-align:middle}
@@ -793,3 +793,86 @@ code{background:#f1f5f9;border:1px solid var(--bdr);border-radius:4px;padding:1p
     min-width: 640px;
   }
 }
+
+/* ══════════════════════════════════════════════════════════
+   Phase 1 Security Fix — replace all inline style= attributes
+   ══════════════════════════════════════════════════════════ */
+
+/* Setup screen */
+.mw-540           { max-width: 540px; }
+.mw-360           { max-width: 360px; text-align: center; }
+.logo-h48         { height: 48px; width: auto; margin: 0 auto 1rem; display: block; filter: invert(1); }
+.logo-h52         { height: 52px; width: auto; margin: 0 auto 1rem; display: block; filter: invert(1); }
+.info-box         { background: #f8fafc; border: 1px solid var(--bdr); border-radius: var(--r); padding: 1rem; margin-bottom: 1.1rem; font-size: .8rem; }
+.info-box-title   { font-weight: 800; margin-bottom: .6rem; }
+.textarea-code    { min-height: 130px; font-family: monospace; font-size: .75rem; }
+.step-warning     { color: #c0392b; }
+
+/* Login screen */
+.login-err-mt     { margin-top: .75rem; text-align: left; }
+.auth-note        { margin-top: 1rem; font-size: .72rem; color: var(--txs); }
+.cfg-btn          { margin-top: .75rem; font-size: .72rem; opacity: .7; }
+
+/* Shared layout helpers */
+.d-none           { display: none; }
+.ov-x-auto        { overflow-x: auto; }
+.flex-gap-5       { display: flex; gap: .5rem; }
+.p-1rem           { padding: 1rem; }
+.mt-1rem          { margin-top: 1rem; }
+
+/* Admin legend row */
+.leg-row          { margin-top: .6rem; display: flex; gap: .9rem; flex-wrap: wrap; align-items: center; font-size: .68rem; color: var(--txs); }
+.leg-label        { font-weight: 800; color: var(--txs); font-size: .65rem; text-transform: uppercase; letter-spacing: .05em; }
+.leg-sw           { width: 22px; height: 10px; border-radius: 2px; }
+.leg-sw-full      { background: var(--full); }
+.leg-sw-am        { background: var(--am); }
+.leg-sw-pm        { background: var(--pm); }
+.leg-sw-avail     { background: #86efac; }
+.leg-sw-unavail   { background: #fca5a5; }
+.leg-sw-free      { background: rgba(0,0,0,.07); border: 1px solid #e2e8f0; }
+
+/* Settings */
+.sett-sub         { opacity: .7; font-weight: 400; font-size: .82rem; }
+.adm-clear-btn    { align-self: flex-end; }
+.set-head-flex    { display: flex; gap: .5rem; }
+.danger-zone-btns { padding: 1rem; display: flex; gap: .6rem; flex-wrap: wrap; }
+
+/* Modals */
+.booking-for-note { display: none; font-size: .8rem; color: var(--txs); margin-bottom: .6rem; padding: .3rem .5rem; background: var(--bg); border-radius: var(--r); }
+
+/* JS-generated content — innerHTML replacements */
+.cal-free-lbl     { color: var(--txs); font-size: .7rem; }
+.chip-sub         { font-size: .62rem; opacity: .7; }
+.badge-sm         { font-size: .65rem; }
+.badge-pending    { background: #f59e0b; color: #fff; }
+.tbl-empty        { padding: 2rem; text-align: center; color: var(--txs); }
+.tbl-email        { font-size: .76rem; }
+.tbl-detail       { font-size: .76rem; color: var(--txs); }
+.tbl-nowrap       { white-space: nowrap; }
+.tbl-right        { text-align: right; }
+.tbl-notes        { color: var(--txs); font-size: .76rem; }
+.tbl-qty-dash     { color: var(--txs); }
+.no-items         { color: var(--txs); font-size: .8rem; padding: .3rem; }
+.fb-inactive      { padding: 2rem; color: var(--txs); font-size: .9rem; }
+.fb-inactive-sub  { margin-top: .5rem; font-size: .8rem; opacity: .7; }
+
+/* Admin timeline table layout */
+.tl-hdr-cell      { text-align: left; padding: .4rem .6rem; }
+.tl-name-cell     { padding: .4rem .6rem; }
+.tl-grp-row       { background: #f1f5f9; }
+.tl-grp-cell      { padding: .3rem .6rem; font-size: .7rem; font-weight: 800; color: var(--txs); text-transform: uppercase; letter-spacing: .06em; }
+.wk-hdr-cell      { text-align: left; padding: .4rem .6rem; min-width: 110px; }
+.tl-scroll-wrap   { overflow-x: auto; }
+.tl-min-700       { min-width: 700px; }
+
+/* Clickable table rows */
+.ltab tbody tr { cursor: pointer; }
+
+/* Small modal variant */
+.modal-sm         { max-width: 300px; }
+
+/* Day-picker button column */
+.flex-col-gap     { display: flex; flex-direction: column; gap: .6rem; }
+
+/* Modal footer top margin (compact dialogs) */
+.mfoot-mt         { margin-top: .75rem; }

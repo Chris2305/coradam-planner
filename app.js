@@ -2,12 +2,21 @@
 // ════════════════════════════════════
 // CONSTANTS
 // ════════════════════════════════════
-// SUPER_ADMIN is injected at build time by inject_config.py from the SUPER_ADMIN_EMAIL GitHub Secret.
-// It is never committed to source. Fallback to empty string (no super-admin) for local dev.
-const SUPER_ADMIN = typeof __SUPER_ADMIN__ !== 'undefined' ? __SUPER_ADMIN__ : '';
 const ALLOWED_DOMAIN = 'coradam.com';
 const COUNTRIES = ['Italy','Thailand','France','Portugal','Spain','India'];
 const FLAGS = {Italy:'🇮🇹',Thailand:'🇹🇭',France:'🇫🇷',Portugal:'🇵🇹',Spain:'🇪🇸',India:'🇮🇳'};
+
+// ════════════════════════════════════
+// DEBUG LOGGING
+// Set DEBUG = true locally to restore console output.
+// In production this is false so no internal state leaks to the browser console.
+// ════════════════════════════════════
+const DEBUG = false;
+const log = {
+  info:  (...a) => { if (DEBUG) console.log(...a);   },
+  warn:  (...a) => { if (DEBUG) console.warn(...a);  },
+  error: (...a) => { if (DEBUG) console.error(...a); },
+};
 
 // ════════════════════════════════════
 // UTILS
@@ -174,7 +183,7 @@ const Auth = {
       provider.setCustomParameters({hd:ALLOWED_DOMAIN});
       await fauth.signInWithPopup(provider);
     } catch(e){
-      console.error('Google sign-in failed:', e.code, e.message, e);
+      log.error('Google sign-in failed:', e.code, e.message, e);
       if(e.code === 'auth/popup-closed-by-user') return;
       err.innerHTML = 'Sign-in failed: ' + U.esc(e.message);
       err.style.display = 'block';
@@ -216,13 +225,13 @@ const App = {
             err.innerHTML = '<strong>Cannot reach Firebase database.</strong><br>URL: <code>'+U.esc(dbUrl)+'</code><br>Please verify this matches <em>Firebase Console → Realtime Database</em> and that the database has been created.';
             err.style.display = 'block';
           }
-          console.error('[Coradam] RTDB unreachable after 5s. databaseURL:', dbUrl);
+          log.error('[Coradam] RTDB unreachable after 5s. databaseURL:', dbUrl);
         }
       }, 5000);
       fdb.ref('.info/connected').on('value', snap=>{
         seen = true;
         clearTimeout(timer);
-        console.log('[Coradam] RTDB connected:', snap.val(), '| databaseURL:', dbUrl);
+        log.info('[Coradam] RTDB connected:', snap.val(), '| databaseURL:', dbUrl);
         fdb.ref('.info/connected').off('value');
       });
     })();
@@ -265,7 +274,7 @@ const App = {
             try{
               await fbDel(`users/${pending.uid}`);
               delete Cache.users[pending.uid];
-            } catch(e){ console.warn('Could not delete pending record (will be cleaned by admin):',e.message); }
+            } catch(e){ log.warn('Could not delete pending record (will be cleaned by admin):',e.message); }
             // Update client userIds that referenced the pending uid (super_admin will handle if this fails)
             try{
               for(const c of Cache.clientsArr()){
@@ -274,7 +283,7 @@ const App = {
                   await fbSet(`clients/${c.id}`,updated); Cache.clients[c.id]=updated;
                 }
               }
-            } catch(e){ console.warn('Could not update client assignments:',e.message); }
+            } catch(e){ log.warn('Could not update client assignments:',e.message); }
           } else {
             // New profiles always start as 'controller'; super_admin role is set by the admin in Firebase
             profile={uid:u.uid,name:u.displayName||email.split('@')[0],email,photo:u.photoURL||'',country:'',role:'controller',active:true,firstLogin:Date.now()};
@@ -294,7 +303,7 @@ const App = {
         // Include error code when available (e.g. PERMISSION_DENIED, auth/unauthorized-domain)
         const code = e.code ? ' ['+e.code+']' : '';
         toast('Load error: '+e.message+code,'err');
-        console.error('[Coradam] onAuthStateChanged error:', e);
+        log.error('[Coradam] onAuthStateChanged error:', e);
       }
       finally{ Spin.off(); }
     });
@@ -518,13 +527,13 @@ const Cal = {
       // Body
       const body=document.createElement('div'); body.className='week-day-body';
       if(!de.length && !hasAvail && !hasUnavail){
-        body.innerHTML='<span style="color:var(--txs);font-size:.7rem">Free</span>';
+        body.innerHTML='<span class="cal-free-lbl">Free</span>';
       } else {
         de.forEach(e=>{
           const chip=document.createElement('div');
           chip.className='chip '+U.chipCls(e.slot);
           chip.style.marginBottom='.2rem';
-          chip.innerHTML=U.esc(e.clientName||e.slot)+'<div style="font-size:.62rem;opacity:.7">'+U.esc(e.factory||'')+'</div>';
+          chip.innerHTML=U.esc(e.clientName||e.slot)+'<div class="chip-sub">'+U.esc(e.factory||'')+'</div>';
           chip.addEventListener('click',ev=>{ ev.stopPropagation(); Slot.edit(e.id); });
           body.appendChild(chip);
         });
@@ -561,7 +570,7 @@ const Cal = {
       dateDiv.innerHTML='<div>'+d.getDate()+'</div><div class="cl-date-sub">'+d.toLocaleDateString('en-GB',{weekday:'short'})+'</div>';
       const info=document.createElement('div'); info.className='cl-info';
       const qty=(e.expectedQty!=null||e.finalQty!=null)?(' · Exp: '+(e.expectedQty??'—')+' / Final: '+(e.finalQty??'—')):'';
-      info.innerHTML='<div class="cl-client">'+U.esc(e.clientName||'—')+' <span class="badge '+U.badgeCls(e.slot)+'" style="font-size:.65rem">'+e.slot+'</span></div>'
+      info.innerHTML='<div class="cl-client">'+U.esc(e.clientName||'—')+' <span class="badge badge-sm '+U.badgeCls(e.slot)+'">'+e.slot+'</span></div>'
         +'<div class="cl-detail">'+U.esc(e.factory||'')+qty+(e.notes?' · '+U.esc(e.notes):'')+'</div>';
       row.appendChild(dateDiv); row.appendChild(info);
       row.addEventListener('click',()=>Slot.edit(e.id));
@@ -1121,11 +1130,11 @@ const Adm = {
     });
 
     if(!allUsers.length){
-      document.getElementById('tl-tbl').innerHTML='<tr><td style="padding:2rem;text-align:center;color:var(--txs)">No controllers found for this country. Add users in ⚙ Settings.</td></tr>';
+      document.getElementById('tl-tbl').innerHTML='<tr><td class="tbl-empty">No controllers found for this country. Add users in ⚙ Settings.</td></tr>';
       return;
     }
 
-    let hdr='<thead><tr><th style="text-align:left;padding:.4rem .6rem">Controller</th>';
+    let hdr='<thead><tr><th class="tl-hdr-cell">Controller</th>';
     for(let d=1;d<=dCount;d++){
       const ds=`${y}-${S2(m+1)}-${S2(d)}`;
       const isT=ds===today, isW=U.isWeekend(y,m,d);
@@ -1140,9 +1149,9 @@ const Adm = {
       // Country group separator
       if(u.country!==lastCountry&&u.country){
         lastCountry=u.country;
-        body+=`<tr style="background:#f1f5f9"><td colspan="${dCount+1}" style="padding:.3rem .6rem;font-size:.7rem;font-weight:800;color:var(--txs);text-transform:uppercase;letter-spacing:.06em">${U.flag(u.country)} ${U.esc(u.country)}</td></tr>`;
+        body+=`<tr class="tl-grp-row"><td colspan="${dCount+1}" class="tl-grp-cell">${U.flag(u.country)} ${U.esc(u.country)}</td></tr>`;
       }
-      body+=`<tr><td style="padding:.4rem .6rem"><div class="tl-un">${U.esc(u.name)}</div>${u.country?`<div class="tl-co">${U.flag(u.country)} ${U.esc(u.country)}</div>`:''}</td>`;
+      body+=`<tr><td class="tl-name-cell"><div class="tl-un">${U.esc(u.name)}</div>${u.country?`<div class="tl-co">${U.flag(u.country)} ${U.esc(u.country)}</div>`:''}</td>`;
       for(let d=1;d<=dCount;d++){
         const ds=`${y}-${S2(m+1)}-${S2(d)}`;
         const isT=ds===today, isW=U.isWeekend(y,m,d);
@@ -1200,14 +1209,14 @@ const Adm = {
       const months=[...new Set(weekDates.map(d=>d.slice(0,7)))];
       months.forEach(mk=>{ const[my,mm]=mk.split('-').map(Number); U.expandAvail(rule,my,mm-1).forEach(date=>{ if(weekDates.includes(date)){ const k=rule.userId+'|'+date; (aMap[k]=aMap[k]||[]).push(rule); } }); });
     });
-    if(!allUsers.length){ document.getElementById('wk-content').innerHTML='<div style="padding:2rem;text-align:center;color:var(--txs)">No controllers for this filter.</div>'; return; }
-    let html='<div style="overflow-x:auto"><table class="tl" style="min-width:700px"><thead><tr><th style="text-align:left;padding:.4rem .6rem;min-width:110px">Controller</th>';
+    if(!allUsers.length){ document.getElementById('wk-content').innerHTML='<div class="tbl-empty">No controllers for this filter.</div>'; return; }
+    let html='<div class="tl-scroll-wrap"><table class="tl tl-min-700"><thead><tr><th class="wk-hdr-cell">Controller</th>';
     days.forEach((d,i)=>{ const ds=d.toISOString().slice(0,10); const isT=ds===today,isW=d.getDay()===0||d.getDay()===6; html+=`<th class="${isT?'tc-td':isW?'wknd-col':''}">${WDAYS[i]}<br>${d.getDate()}</th>`; });
     html+='</tr></thead><tbody>';
     let lastCountry='';
     allUsers.forEach(u=>{
-      if(u.country!==lastCountry&&u.country){ lastCountry=u.country; html+=`<tr style="background:#f1f5f9"><td colspan="8" style="padding:.3rem .6rem;font-size:.7rem;font-weight:800;color:var(--txs);text-transform:uppercase">${U.flag(u.country)} ${U.esc(u.country)}</td></tr>`; }
-      html+=`<tr><td style="padding:.4rem .6rem"><div class="tl-un">${U.esc(u.name)}</div></td>`;
+      if(u.country!==lastCountry&&u.country){ lastCountry=u.country; html+=`<tr class="tl-grp-row"><td colspan="8" class="tl-grp-cell">${U.flag(u.country)} ${U.esc(u.country)}</td></tr>`; }
+      html+=`<tr><td class="tl-name-cell"><div class="tl-un">${U.esc(u.name)}</div></td>`;
       days.forEach(d=>{
         const ds=d.toISOString().slice(0,10);
         const isT=ds===today, isW=d.getDay()===0||d.getDay()===6;
@@ -1243,9 +1252,9 @@ const Adm = {
     const f=this.filtered;
     if(!f.length){ document.getElementById('ls-content').innerHTML='<div class="empty"><div class="empty-ic">📭</div><div class="empty-t">No bookings found</div><div class="empty-s">Adjust filters above.</div></div>'; return; }
     const sorted=[...f].sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
-    let html='<div style="overflow-x:auto"><table class="ltab"><thead><tr><th>Date</th><th>Controller</th><th>Country</th><th>Slot</th><th>Client</th><th>Factory</th><th>Exp. Qty</th><th>Final Qty</th><th>Notes</th></tr></thead><tbody>';
+    let html='<div class="ov-x-auto"><table class="ltab"><thead><tr><th>Date</th><th>Controller</th><th>Country</th><th>Slot</th><th>Client</th><th>Factory</th><th>Exp. Qty</th><th>Final Qty</th><th>Notes</th></tr></thead><tbody>';
     sorted.forEach(e=>{
-      html+=`<tr style="cursor:pointer" data-eid="${e.id}" title="Click to edit"><td><strong>${U.fmt(e.date)}</strong></td><td>${U.flag(e.userCountry)} ${U.esc(e.userName)}</td><td>${U.esc(e.userCountry)}</td><td><span class="badge ${U.badgeCls(e.slot)}">${U.esc(e.slot)}</span></td><td>${U.esc(e.clientName)}</td><td>${U.esc(e.factory)}</td><td style="text-align:right">${e.expectedQty!=null?e.expectedQty:'<span style="color:var(--txs)">—</span>'}</td><td style="text-align:right">${e.finalQty!=null?e.finalQty:'<span style="color:var(--txs)">—</span>'}</td><td style="color:var(--txs);font-size:.76rem">${U.esc(e.notes)}</td></tr>`;
+      html+=`<tr data-eid="${e.id}" title="Click to edit"><td><strong>${U.fmt(e.date)}</strong></td><td>${U.flag(e.userCountry)} ${U.esc(e.userName)}</td><td>${U.esc(e.userCountry)}</td><td><span class="badge ${U.badgeCls(e.slot)}">${U.esc(e.slot)}</span></td><td>${U.esc(e.clientName)}</td><td>${U.esc(e.factory)}</td><td class="tbl-right">${e.expectedQty!=null?e.expectedQty:'<span class="tbl-qty-dash">—</span>'}</td><td class="tbl-right">${e.finalQty!=null?e.finalQty:'<span class="tbl-qty-dash">—</span>'}</td><td class="tbl-notes">${U.esc(e.notes)}</td></tr>`;
     });
     html+='</tbody></table></div>';
     document.getElementById('ls-content').innerHTML=html;
@@ -1286,11 +1295,11 @@ const Sett = {
 
   _renderUsers(){
     const users=Cache.usersArr().filter(u=>u.role!=='super_admin').sort((a,b)=>(a.country||'').localeCompare(b.country||'')||a.name.localeCompare(b.name));
-    if(!users.length){ document.getElementById('u-tbody').innerHTML=`<tr><td colspan="6" style="text-align:center;padding:1.5rem;color:var(--txs)">No controllers yet. Click "+ Add Controller" to pre-register them by email.</td></tr>`; return; }
+    if(!users.length){ document.getElementById('u-tbody').innerHTML=`<tr><td colspan="6" class="tbl-empty">No controllers yet. Click "+ Add Controller" to pre-register them by email.</td></tr>`; return; }
     document.getElementById('u-tbody').innerHTML=users.map(u=>{
-      const uClients=Cache.clientsArr().filter(c=>(c.userIds||[]).includes(u.uid)).map(c=>U.esc(c.name)).join(', ')||'<span style="color:var(--txs)">none</span>';
-      const statusBadge=u.pending?'<span class="badge" style="background:#f59e0b;color:#fff">Pending</span>':`<span class="badge ${u.active?'b-on':'b-off'}">${u.active?'Active':'Inactive'}</span>`;
-      return `<tr><td><strong>${U.esc(u.name||u.email.split('@')[0])}</strong></td><td style="font-size:.76rem">${U.esc(u.email)}</td><td>${u.country?U.flag(u.country)+' '+U.esc(u.country):'<span style="color:var(--txs)">—</span>'}</td><td style="font-size:.76rem">${uClients}</td><td>${statusBadge}</td><td style="white-space:nowrap"><button class="btn btn-s btn-sm" data-action="edit" data-uid="${U.esc(u.uid)}">Edit</button> <button class="btn btn-d btn-sm" data-action="delete" data-uid="${U.esc(u.uid)}">Delete</button></td></tr>`;
+      const uClients=Cache.clientsArr().filter(c=>(c.userIds||[]).includes(u.uid)).map(c=>U.esc(c.name)).join(', ')||'<span class="tbl-qty-dash">none</span>';
+      const statusBadge=u.pending?'<span class="badge badge-pending">Pending</span>':`<span class="badge ${u.active?'b-on':'b-off'}">${u.active?'Active':'Inactive'}</span>`;
+      return `<tr><td><strong>${U.esc(u.name||u.email.split('@')[0])}</strong></td><td class="tbl-email">${U.esc(u.email)}</td><td>${u.country?U.flag(u.country)+' '+U.esc(u.country):'<span class="tbl-qty-dash">—</span>'}</td><td class="tbl-email">${uClients}</td><td>${statusBadge}</td><td class="tbl-nowrap"><button class="btn btn-s btn-sm" data-action="edit" data-uid="${U.esc(u.uid)}">Edit</button> <button class="btn btn-d btn-sm" data-action="delete" data-uid="${U.esc(u.uid)}">Delete</button></td></tr>`;
     }).join('');
     // Bind buttons — onclick attributes in innerHTML are blocked by CSP
     document.getElementById('u-tbody').querySelectorAll('button[data-action]').forEach(btn=>{
@@ -1335,7 +1344,7 @@ const Sett = {
     document.getElementById('mu-err').style.display='none';
     // Fill client checkboxes
     const clients=Cache.clientsArr();
-    document.getElementById('mu-clients').innerHTML=clients.length?clients.map(c=>`<label class="chk-item"><input type="checkbox" value="${c.id}" ${(c.userIds||[]).includes(uid)?'checked':''}>${U.esc(c.name)}</label>`).join(''):'<div style="color:var(--txs);font-size:.8rem;padding:.3rem">No clients yet.</div>';
+    document.getElementById('mu-clients').innerHTML=clients.length?clients.map(c=>`<label class="chk-item"><input type="checkbox" value="${c.id}" ${(c.userIds||[]).includes(uid)?'checked':''}>${U.esc(c.name)}</label>`).join(''):'<div class="no-items">No clients yet.</div>';
     M.open('m-user');
   },
 
@@ -1361,7 +1370,7 @@ const Sett = {
         }
       }
       M.close('m-user'); this._renderUsers(); toast('Controller updated.');
-    } catch(e){ console.error('saveUser error',e); err.textContent='Save failed: '+(e?.message||e); err.style.display='block'; }
+    } catch(e){ log.error('saveUser error',e); err.textContent='Save failed: '+(e?.message||e); err.style.display='block'; }
     finally{ Spin.off(); }
   },
 
@@ -1406,11 +1415,11 @@ const Sett = {
 
   _renderClients(){
     const clients=Cache.clientsArr().sort((a,b)=>a.name.localeCompare(b.name));
-    if(!clients.length){ document.getElementById('c-tbody').innerHTML=`<tr><td colspan="4" style="text-align:center;padding:1.5rem;color:var(--txs)">No clients yet.</td></tr>`; return; }
+    if(!clients.length){ document.getElementById('c-tbody').innerHTML=`<tr><td colspan="4" class="tbl-empty">No clients yet.</td></tr>`; return; }
     document.getElementById('c-tbody').innerHTML=clients.map(c=>{
       const facs=(c.factories||[]).join(', ')||'—';
       const auds=(c.userIds||[]).map(uid=>Cache.users[uid]?.name||'').filter(Boolean).join(', ')||'—';
-      return `<tr><td><strong>${U.esc(c.name)}</strong></td><td style="font-size:.76rem;color:var(--txs)">${U.esc(facs)}</td><td style="font-size:.76rem">${U.esc(auds)}</td><td><button class="btn btn-s btn-sm" data-cid="${U.esc(c.id)}">Edit</button></td></tr>`;
+      return `<tr><td><strong>${U.esc(c.name)}</strong></td><td class="tbl-detail">${U.esc(facs)}</td><td class="tbl-email">${U.esc(auds)}</td><td><button class="btn btn-s btn-sm" data-cid="${U.esc(c.id)}">Edit</button></td></tr>`;
     }).join('');
     // Bind edit buttons — onclick attributes in innerHTML are blocked by CSP
     document.getElementById('c-tbody').querySelectorAll('button[data-cid]').forEach(btn=>{
@@ -1443,7 +1452,7 @@ const Sett = {
 
   _fillClientUserChk(assigned){
     const users=Cache.usersArr().filter(u=>u.role==='controller'&&u.active).sort((a,b)=>a.name.localeCompare(b.name));
-    document.getElementById('mc-users').innerHTML=users.length?users.map(u=>`<label class="chk-item"><input type="checkbox" value="${u.uid}" ${assigned.includes(u.uid)?'checked':''}>${U.flag(u.country)} ${U.esc(u.name)}${u.country?' ('+u.country+')':''}</label>`).join(''):'<div style="color:var(--txs);font-size:.8rem;padding:.3rem">No controllers yet.</div>';
+    document.getElementById('mc-users').innerHTML=users.length?users.map(u=>`<label class="chk-item"><input type="checkbox" value="${u.uid}" ${assigned.includes(u.uid)?'checked':''}>${U.flag(u.country)} ${U.esc(u.name)}${u.country?' ('+u.country+')':''}</label>`).join(''):'<div class="no-items">No controllers yet.</div>';
   },
 
   async saveClient(){
@@ -1460,7 +1469,7 @@ const Sett = {
       const client={id:cid,name,factories:facs,userIds};
       await fbSet(`clients/${cid}`,client); Cache.clients[cid]=client;
       M.close('m-client'); this._renderClients(); toast('Client saved.');
-    } catch(e){ console.error('saveClient error',e); document.getElementById('mc-err').textContent='Save failed: '+(e?.message||e); document.getElementById('mc-err').style.display='block'; }
+    } catch(e){ log.error('saveClient error',e); document.getElementById('mc-err').textContent='Save failed: '+(e?.message||e); document.getElementById('mc-err').style.display='block'; }
     finally{ Spin.off(); }
   },
 
@@ -1521,7 +1530,7 @@ const Sett = {
     // Write audit entry before any data is deleted
     try{
       await fbSet('audit_log/wipe_'+Date.now(),{action:'wipe_all',by:App.user?.email||'unknown',at:Date.now()});
-    } catch(e){ console.warn('Audit log write failed:',e.message); }
+    } catch(e){ log.warn('Audit log write failed:',e.message); }
     Spin.on();
     try{
       await Promise.all([fbDel('users'),fbDel('clients'),fbDel('entries'),fbDel('availability')]);
@@ -1543,7 +1552,7 @@ const FB = {
   async render(){
     const sec=document.getElementById('gt-freshbooks');
     if(!sec) return;
-    sec.innerHTML='<div style="padding:2rem;color:var(--txs);font-size:.9rem"><p>Freshbooks integration is not currently active.</p><p style="margin-top:.5rem;font-size:.8rem;opacity:.7">To enable it, a Cloudflare Worker must be deployed. Contact your administrator.</p></div>';
+    sec.innerHTML='<div class="fb-inactive"><p>Freshbooks integration is not currently active.</p><p class="fb-inactive-sub">To enable it, a Cloudflare Worker must be deployed. Contact your administrator.</p></div>';
   },
 
   _build(){},

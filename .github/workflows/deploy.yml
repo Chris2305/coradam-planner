@@ -14,21 +14,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Inject secrets from GitHub into app.js at build time.
-      # Required GitHub Secrets:
-      #   FIREBASE_CONFIG   — full JSON config object from Firebase (apiKey, databaseURL, etc.)
-      #   SUPER_ADMIN_EMAIL — email address of the super-admin account (never committed to source)
-      - name: Inject build-time secrets
+      # Build: copy only whitelisted front-end files into dist/
+      - name: Build dist (whitelist)
+        run: bash build.sh
+
+      # Inject Firebase config from the GitHub Secret into dist/app.js.
+      # Required GitHub Secret:
+      #   FIREBASE_CONFIG — full JSON config object from Firebase (apiKey, databaseURL, etc.)
+      - name: Inject Firebase config into dist/app.js
         run: python3 inject_config.py
         env:
           FIREBASE_CONFIG: ${{ secrets.FIREBASE_CONFIG }}
-          SUPER_ADMIN_EMAIL: ${{ secrets.SUPER_ADMIN_EMAIL }}
 
       # Deploy the processed files to the gh-pages branch
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./
+          publish_dir: ./dist
           publish_branch: gh-pages
-          exclude_assets: '.github,inject_config.py,functions,firebase.json,.firebaserc,database.rules.json,FRESHBOOKS_SETUP.md,SECURITY_AUDIT.md,import-clients.html'
