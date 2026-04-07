@@ -181,7 +181,11 @@ const Auth = {
     try{
       const provider=new firebase.auth.GoogleAuthProvider();
       provider.setCustomParameters({hd:ALLOWED_DOMAIN});
-      await fauth.signInWithPopup(provider);
+      // Request Drive.file scope for document upload feature
+      provider.addScope('https://www.googleapis.com/auth/drive.file');
+      const result=await fauth.signInWithPopup(provider);
+      // Store Google OAuth access token for Drive API calls
+      if(result.credential) App._driveToken=result.credential.accessToken||null;
     } catch(e){
       log.error('Google sign-in failed:', e.code, e.message, e);
       if(e.code === 'auth/popup-closed-by-user') return;
@@ -202,6 +206,7 @@ const Auth = {
 const App = {
   user: null,
   _pendingDate: null,
+  _driveToken: null,
 
   async init(){
        const embeddedCfg = typeof __FIREBASE_CONFIG__ !== 'undefined' ? __FIREBASE_CONFIG__ : null;
@@ -633,6 +638,15 @@ const Slot = {
     this.pick(e.slot);
     this._setForUser(e.userId);
     this._fillClients(e.userId||App.user.uid, e.clientId||'', e.factory||'');
+    // Show documents section in edit mode
+    document.getElementById('ms-docs-wrap').style.display='block';
+    this._renderDocs(e);
+    // Wire upload input — re-attach each open to avoid duplicate listeners
+    const inp=document.getElementById('ms-doc-input');
+    inp.value=''; // reset file input
+    const fresh=inp.cloneNode(true);
+    inp.parentNode.replaceChild(fresh,inp);
+    fresh.addEventListener('change',()=>Drive.uploadFromInput(fresh,id));
     M.open('m-slot');
   },
   pick(type){
@@ -647,6 +661,10 @@ const Slot = {
     document.getElementById('ms-type').value='';
     document.getElementById('ms-repeat').value='none';
     document.getElementById('ms-err').style.display='none';
+    document.getElementById('ms-docs-wrap').style.display='none';
+    document.getElementById('ms-docs-list').innerHTML='';
+    document.getElementById('ms-doc-status').textContent='';
+    document.getElementById('ms-doc-status').className='';
     ['sb-f','sb-a','sb-p'].forEach(id=>document.getElementById(id).className='slt-btn');
     document.querySelectorAll('#ms-wd-btns .wd-btn').forEach(b=>b.classList.remove('on'));
     this.onRepeatChange(); // resets sub-section visibility and button label
@@ -666,6 +684,17 @@ const Slot = {
     if(selFac&&!(c.factories||[]).includes(selFac)) fs.innerHTML+=`<option value="${U.esc(selFac)}" selected>${U.esc(selFac)}</option>`;
   },
   onClientChange(){ this._fillFacs(document.getElementById('ms-client').value,''); },
+
+  _renderDocs(entry){
+    const docs=entry.documents||[];
+    const list=document.getElementById('ms-docs-list');
+    if(!docs.length){ list.innerHTML='<div style="font-size:.78rem;color:var(--txs)">No documents yet.</div>'; return; }
+    const ICONS={'application/pdf':'📄','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'📊','application/vnd.ms-excel':'📊','text/csv':'📋','image':'🖼','video':'🎞'};
+    list.innerHTML=docs.map(d=>{
+      const ico=ICONS[d.mimeType]||( d.mimeType?.startsWith('image')? ICONS['image'] : d.mimeType?.startsWith('video')? ICONS['video'] : '📎' );
+      return `<div class="doc-item"><span class="doc-item-icon">${ico}</span><a href="${U.esc(d.webViewLink)}" target="_blank" rel="noopener" class="doc-item-name">${U.esc(d.name)}</a></div>`;
+    }).join('');
+  },
 
   // ── Recurrence UI visibility ──────────────────────────────────────────
   onRepeatChange(){
@@ -1353,6 +1382,27 @@ const Sett = {
     // Fill client checkboxes
     const clients=Cache.clientsArr();
     document.getElementById('mu-clients').innerHTML=clients.length?clients.map(c=>`<label class="chk-item"><input type="checkbox" value="${c.id}" ${(c.userIds||[]).includes(uid)?'checked':''}>${U.esc(c.name)}</label>`).join(''):'<div class="no-items">No clients yet.</div>';
+    // Build weekly availability grid (Mon=0 … Fri=4, Monday-first convention)
+    const wa=u.weeklyAvail||{0:{am:true,pm:true},1:{am:true,pm:true},2:{am:true,pm:true},3:{am:true,pm:true},4:{am:true,pm:true}};
+    const DAYS=['Mon','Tue','Wed','Thu','Fri'];
+    const grid=document.getElementById('mu-avail-grid');
+    grid.innerHTML='';
+    DAYS.forEach((lbl,i)=>{
+      const col=el('div','av-week-col');
+      const day=el('div','av-week-lbl'); day.textContent=lbl;
+      const amBar=el('div','av-week-half'+(wa[i]?.am?' on-am':'')); amBar.dataset.wd=i; amBar.dataset.half='am'; amBar.title=lbl+' AM';
+      const pmBar=el('div','av-week-half'+(wa[i]?.pm?' on-pm':'')); pmBar.dataset.wd=i; pmBar.dataset.half='pm'; pmBar.title=lbl+' PM';
+      const sub=el('div','av-week-sub'); sub.textContent='AM / PM';
+      col.append(day,amBar,pmBar,sub);
+      grid.appendChild(col);
+    });
+    // Bind toggle events (re-attached each open to avoid stale listeners)
+    grid.querySelectorAll('.av-week-half').forEach(b=>{
+      b.addEventListener('click',()=>{
+        if(b.dataset.half==='am') b.classList.toggle('on-am');
+        else b.classList.toggle('on-pm');
+      });
+    });
     M.open('m-user');
   },
 
@@ -1362,10 +1412,18 @@ const Sett = {
     const err=document.getElementById('mu-err');
     err.style.display='none';
     const checkedClientIds=[...document.querySelectorAll('#mu-clients input:checked')].map(cb=>cb.value);
+    // Collect weeklyAvail from the grid
+    const weeklyAvail={};
+    document.querySelectorAll('#mu-avail-grid .av-week-half').forEach(b=>{
+      const i=+b.dataset.wd;
+      if(!weeklyAvail[i]) weeklyAvail[i]={am:false,pm:false};
+      if(b.dataset.half==='am') weeklyAvail[i].am=b.classList.contains('on-am');
+      else weeklyAvail[i].pm=b.classList.contains('on-pm');
+    });
     Spin.on();
     try{
-      // Update user country
-      const u={...Cache.users[uid],country};
+      // Update user country + weeklyAvail
+      const u={...Cache.users[uid],country,weeklyAvail};
       await fbSet(`users/${uid}`,u); Cache.users[uid]=u;
       // Update client assignments
       for(const c of Cache.clientsArr()){
@@ -1573,6 +1631,129 @@ const FB = {
 };
 
 // ════════════════════════════════════
+// GOOGLE DRIVE INTEGRATION
+// Uses Drive REST API v3 with the OAuth access token obtained at sign-in.
+// Scope: https://www.googleapis.com/auth/drive.file (only files created by this app).
+// Folder hierarchy: {Controller Name} → {Client Name} → {Factory Name} → {Date}
+// The controller root folder is shared with c.nocher@coradam.com on first upload.
+// ════════════════════════════════════
+const DRIVE_SHARE_EMAIL = 'c.nocher@coradam.com';
+const Drive = {
+  // Obtain a valid Drive access token, prompting re-auth if needed
+  async _token(){
+    if(App._driveToken) return App._driveToken;
+    // Re-auth to obtain Google OAuth access token with Drive scope
+    const provider=new firebase.auth.GoogleAuthProvider();
+    provider.addScope('https://www.googleapis.com/auth/drive.file');
+    const result=await fauth.currentUser.reauthenticateWithPopup(provider);
+    App._driveToken=result.credential.accessToken;
+    return App._driveToken;
+  },
+
+  // Drive REST helper — JSON request
+  async _api(method, path, body, token){
+    const res=await fetch(`https://www.googleapis.com/drive/v3/${path}`,{
+      method, headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+      body:body?JSON.stringify(body):undefined
+    });
+    if(!res.ok){ const t=await res.text(); throw new Error(`Drive API ${method} ${path}: ${res.status} ${t}`); }
+    return res.json();
+  },
+
+  // Find a folder by name under parent (or root if parentId null)
+  async _findFolder(name, parentId, token){
+    const par=parentId?` and '${parentId}' in parents`:'';
+    const q=`name='${name.replace(/'/g,"\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false${par}`;
+    const res=await this._api('GET',`files?q=${encodeURIComponent(q)}&fields=files(id,name)&spaces=drive`,null,token);
+    return res.files?.[0]?.id||null;
+  },
+
+  // Get-or-create a folder
+  async _folder(name, parentId, token){
+    const existing=await this._findFolder(name,parentId,token);
+    if(existing) return existing;
+    const meta={name,mimeType:'application/vnd.google-apps.folder'};
+    if(parentId) meta.parents=[parentId];
+    const res=await this._api('POST','files',meta,token);
+    return res.id;
+  },
+
+  // Share a folder (reader access) with DRIVE_SHARE_EMAIL
+  async _share(folderId, token){
+    await this._api('POST',`files/${folderId}/permissions`,{role:'reader',type:'user',emailAddress:DRIVE_SHARE_EMAIL},token);
+  },
+
+  // Multipart upload — returns file ID
+  async _upload(file, parentId, token){
+    const meta={name:file.name,parents:[parentId]};
+    const boundary='-------coradam_boundary';
+    const metaPart=`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n`;
+    const filePart=`--${boundary}\r\nContent-Type: ${file.type||'application/octet-stream'}\r\n\r\n`;
+    const closing=`\r\n--${boundary}--`;
+    // Build multipart body as Uint8Array for correct binary handling
+    const enc=new TextEncoder();
+    const fileBytes=await file.arrayBuffer();
+    const combined=new Uint8Array(enc.encode(metaPart).byteLength+enc.encode(filePart).byteLength+fileBytes.byteLength+enc.encode(closing).byteLength);
+    let off=0;
+    const write=b=>{ combined.set(b,off); off+=b.byteLength; };
+    write(enc.encode(metaPart)); write(enc.encode(filePart));
+    write(new Uint8Array(fileBytes)); write(enc.encode(closing));
+    const res=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink',{
+      method:'POST',
+      headers:{'Authorization':'Bearer '+token,'Content-Type':`multipart/related; boundary=${boundary}`},
+      body:combined
+    });
+    if(!res.ok){ const t=await res.text(); throw new Error(`Drive upload failed: ${res.status} ${t}`); }
+    return res.json();
+  },
+
+  // Main entry point: upload a file and attach it to an entry
+  async uploadFromInput(input, entryId){
+    const file=input.files?.[0]; if(!file) return;
+    const entry=Cache.entries[entryId]; if(!entry) return;
+    const status=document.getElementById('ms-doc-status');
+    const lbl=document.getElementById('ms-doc-upload-lbl');
+    status.textContent='Uploading…'; status.className='doc-status';
+    lbl.style.pointerEvents='none'; lbl.style.opacity='.55';
+    try{
+      const token=await this._token();
+      const user=Cache.users[entry.userId]||App.user;
+      // Get-or-create controller root folder
+      let rootId=user.driveRootFolderId;
+      if(!rootId){
+        rootId=await this._folder(user.name,null,token);
+        // Share with c.nocher@coradam.com (once, on creation)
+        await this._share(rootId,token);
+        const upd={...user,driveRootFolderId:rootId};
+        await fbUpdate(`users/${user.uid}`,{driveRootFolderId:rootId});
+        Cache.users[user.uid]=upd;
+      }
+      // Folder chain: client → factory → date
+      const clientId =await this._folder(entry.clientName||'Unknown',rootId,token);
+      const factoryId=await this._folder(entry.factory||'Unknown',clientId,token);
+      const dateId   =await this._folder(entry.date,factoryId,token);
+      // Upload file
+      const result=await this._upload(file,dateId,token);
+      // Persist document reference in Firebase
+      const doc={id:U.uuid(),name:file.name,mimeType:file.type||'',driveId:result.id,webViewLink:result.webViewLink,uploadedAt:Date.now()};
+      const docs=[...(entry.documents||[]),doc];
+      await fbUpdate(`entries/${entryId}`,{documents:docs});
+      Cache.entries[entryId]={...entry,documents:docs};
+      // Refresh docs list in modal
+      Slot._renderDocs(Cache.entries[entryId]);
+      status.textContent='Uploaded successfully.';
+    } catch(e){
+      log.error('Drive upload error',e);
+      status.textContent='Upload failed: '+e.message;
+      status.className='doc-status err';
+    } finally{
+      lbl.style.pointerEvents=''; lbl.style.opacity='';
+      input.value='';
+    }
+  }
+};
+
+// ════════════════════════════════════
 // REPORTS (Super Admin only)
 // Charts use CSS bars + raw SVG — no external CDN required (CSP restriction).
 // ════════════════════════════════════
@@ -1592,11 +1773,20 @@ const Rpt = {
   },
 
   render(){
-    const year  = +document.getElementById('rp-year').value;
-    const month = +document.getElementById('rp-month').value; // 0 = full year
-    this._renderUtil(year, month);
-    this._renderClients(year, month);
-    this._renderQtyTrend(year, month);
+    const year   = +document.getElementById('rp-year').value;
+    const moRaw  = document.getElementById('rp-month').value; // '0','1'-'12','q1'-'q4'
+    this._renderUtil(year, moRaw);
+    this._renderClients(year, moRaw);
+    this._renderQtyTrend(year, moRaw);
+  },
+
+  // Return JS months (0-based) covered by the selection
+  _periodMonths(moRaw){
+    const q={q1:[0,1,2],q2:[3,4,5],q3:[6,7,8],q4:[9,10,11]};
+    if(q[moRaw]) return q[moRaw];
+    const n=+moRaw;
+    if(n===0) return [0,1,2,3,4,5,6,7,8,9,10,11];
+    return [n-1]; // n is 1-based
   },
 
   // Count Mon–Fri working days in a given month (m = 0-based JS month)
@@ -1606,54 +1796,73 @@ const Rpt = {
     return n;
   },
 
-  // Entries matching the selected year (+ month if not 0)
-  _entries(y, mo){
+  // Entries matching the selected period
+  _entries(y, moRaw){
+    const months=this._periodMonths(moRaw); // 0-based JS months
     return Cache.entriesArr().filter(e=>{
       if(!e.date) return false;
       const [ey,em]=e.date.split('-').map(Number);
       if(ey!==y) return false;
-      if(mo!==0 && em!==mo) return false;
-      return true;
+      return months.includes(em-1); // em is 1-based
     });
   },
 
-  _renderUtil(y, mo){
-    const entries = this._entries(y, mo);
-    const totalWD = mo===0
-      ? Array.from({length:12},(_,i)=>this._wDays(y,i)).reduce((s,n)=>s+n,0)
-      : this._wDays(y, mo-1);
+  _renderUtil(y, moRaw){
+    const months  = this._periodMonths(moRaw); // 0-based JS months
+    const entries = this._entries(y, moRaw);
+    const totalWD = months.reduce((s,m)=>s+this._wDays(y,m),0);
     const controllers = Cache.usersArr()
       .filter(u=>u.role==='controller'&&u.active)
       .sort((a,b)=>a.name.localeCompare(b.name));
 
+    // Pre-expand availability rules per user across the period
+    const availByUser={};
+    Cache.availArr().filter(r=>r.type==='available').forEach(rule=>{
+      months.forEach(m=>{
+        U.expandAvail(rule,y,m).forEach(d=>{
+          (availByUser[rule.userId]=availByUser[rule.userId]||new Set()).add(d);
+        });
+      });
+    });
+
     let html='';
     controllers.forEach(u=>{
-      const ue = entries.filter(e=>e.userId===u.uid);
-      const full  = ue.filter(e=>e.slot==='Full Day').length;
-      const am    = ue.filter(e=>e.slot==='Half Day AM').length;
-      const pm    = ue.filter(e=>e.slot==='Half Day PM').length;
-      const total = full + (am+pm)*0.5;
-      const pct   = totalWD ? Math.min(100,(total/totalWD)*100) : 0;
-      const fPct  = totalWD ? Math.min(100,(full/totalWD)*100) : 0;
-      const aPct  = totalWD ? Math.min(100,(am*0.5/totalWD)*100) : 0;
-      const pPct  = totalWD ? Math.min(100,(pm*0.5/totalWD)*100) : 0;
+      const ue     = entries.filter(e=>e.userId===u.uid);
+      const full   = ue.filter(e=>e.slot==='Full Day').length;
+      const am     = ue.filter(e=>e.slot==='Half Day AM').length;
+      const pm     = ue.filter(e=>e.slot==='Half Day PM').length;
+      const booked = full + (am+pm)*0.5;
+      const fPct   = totalWD ? Math.min(100,(full/totalWD)*100) : 0;
+      const aPct   = totalWD ? Math.min(100,(am*0.5/totalWD)*100) : 0;
+      const pPct   = totalWD ? Math.min(100,(pm*0.5/totalWD)*100) : 0;
+      const bookedPct = totalWD ? Math.min(100,(booked/totalWD)*100) : 0;
+      // Availability
+      const availDays = (availByUser[u.uid]||new Set()).size;
+      const availPct  = totalWD ? Math.min(100,(availDays/totalWD)*100) : 0;
+      // Available-but-unbooked segment (cap at availPct, never negative)
+      const unbookedPct = Math.max(0, availPct - bookedPct);
+      const bkOfAvail = availDays ? Math.round((booked/availDays)*100) : null;
+      const pctLabel = bkOfAvail!=null
+        ? `<span class="rp-util-pct-main">${Math.round(bookedPct)}%</span><br><span style="font-size:.66rem">${bkOfAvail}% of avail.</span>`
+        : `<span class="rp-util-pct-main">${Math.round(bookedPct)}%</span>`;
       html+=`<div class="rp-util-row">`+
         `<div class="rp-util-name" title="${U.esc(u.name)}">${U.esc(u.name)}</div>`+
         `<div class="rp-util-bar-wrap">`+
           `<div class="rp-util-bar">`+
-            `<div class="rp-seg rp-seg-f" style="width:${fPct.toFixed(1)}%"></div>`+
-            `<div class="rp-seg rp-seg-a" style="width:${aPct.toFixed(1)}%"></div>`+
-            `<div class="rp-seg rp-seg-p" style="width:${pPct.toFixed(1)}%"></div>`+
+            `<div class="rp-seg rp-seg-f"  style="width:${fPct.toFixed(1)}%"></div>`+
+            `<div class="rp-seg rp-seg-a"  style="width:${aPct.toFixed(1)}%"></div>`+
+            `<div class="rp-seg rp-seg-p"  style="width:${pPct.toFixed(1)}%"></div>`+
+            `<div class="rp-seg rp-seg-av" style="width:${unbookedPct.toFixed(1)}%"></div>`+
           `</div>`+
-          `<div class="rp-util-pct">${Math.round(pct)}%</div>`+
+          `<div class="rp-util-pct">${pctLabel}</div>`+
         `</div>`+
       `</div>`;
     });
     document.getElementById('rp-util-body').innerHTML = html || '<div class="no-items">No data for this period.</div>';
   },
 
-  _renderClients(y, mo){
-    const entries = this._entries(y, mo);
+  _renderClients(y, moRaw){
+    const entries = this._entries(y, moRaw);
     const map={};
     entries.forEach(e=>{
       const cn=e.clientName||'(unknown)';
@@ -1676,8 +1885,9 @@ const Rpt = {
     document.getElementById('rp-cli-body').innerHTML = html || '<div class="no-items">No bookings for this period.</div>';
   },
 
-  _renderQtyTrend(y, mo){
-    const months = mo===0 ? Array.from({length:12},(_,i)=>i+1) : [mo];
+  _renderQtyTrend(y, moRaw){
+    const qMap={q1:[1,2,3],q2:[4,5,6],q3:[7,8,9],q4:[10,11,12]};
+    const months = qMap[moRaw]||( +moRaw===0 ? Array.from({length:12},(_,i)=>i+1) : [+moRaw] );
     const allE = Cache.entriesArr().filter(e=>e.date&&e.date.startsWith(y+'-'));
     const MLBL=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     const data = months.map(m=>{

@@ -246,6 +246,11 @@
             <option value="10">October</option>
             <option value="11">November</option>
             <option value="12">December</option>
+            <option disabled>──────────</option>
+            <option value="q1">Q1 — Jan · Feb · Mar</option>
+            <option value="q2">Q2 — Apr · May · Jun</option>
+            <option value="q3">Q3 — Jul · Aug · Sep</option>
+            <option value="q4">Q4 — Oct · Nov · Dec</option>
           </select>
         </div>
         <button class="btn btn-p btn-sm" id="btn-rp-apply">Apply</button>
@@ -255,9 +260,10 @@
         <div class="rp-card">
           <div class="rp-card-t">Controller Utilisation</div>
           <div class="rp-util-legend">
-            <span class="rp-leg-dot rp-leg-full"></span>Full Day
-            <span class="rp-leg-dot rp-leg-am"></span>Half AM
-            <span class="rp-leg-dot rp-leg-pm"></span>Half PM
+            <span class="rp-leg-dot rp-leg-full"></span>Full Day booked
+            <span class="rp-leg-dot rp-leg-am"></span>Half AM booked
+            <span class="rp-leg-dot rp-leg-pm"></span>Half PM booked
+            <span class="rp-leg-dot" style="background:#86efac"></span>Available (unbooked)
           </div>
           <div id="rp-util-body"></div>
         </div>
@@ -420,6 +426,16 @@
       <div class="fg"><label class="lbl">Final Qty <span class="lbl-opt">(opt.)</span></label><input type="number" id="ms-fqty" class="inp inp-num" placeholder="—" min="0" step="1"></div>
     </div>
     <div class="fg"><label class="lbl">Notes <span class="lbl-opt">(opt.)</span></label><textarea id="ms-notes" class="inp ta" placeholder="Additional notes…"></textarea></div>
+    <!-- Documents section — visible in edit mode only -->
+    <div class="fg" id="ms-docs-wrap" style="display:none">
+      <label class="lbl">Documents</label>
+      <div id="ms-docs-list" class="docs-list"></div>
+      <label class="btn btn-s btn-sm docs-upload-btn" id="ms-doc-upload-lbl">
+        ⬆ Upload document
+        <input type="file" id="ms-doc-input" accept=".pdf,.xlsx,.xls,.csv,.jpg,.jpeg,.png,.gif,.webp,.mp4,.mov,.avi" style="display:none">
+      </label>
+      <div id="ms-doc-status"></div>
+    </div>
     <div id="ms-err" class="err-msg"></div>
     <div class="mfoot">
       <button class="btn btn-d btn-sm ml d-none" id="ms-del">Delete</button>
@@ -521,6 +537,12 @@
     <div class="fg">
       <label class="lbl">Assigned clients</label>
       <div class="chk-list" id="mu-clients"></div>
+    </div>
+    <div class="fg">
+      <label class="lbl">Default weekly availability</label>
+      <div class="av-week-grid" id="mu-avail-grid">
+        <!-- Mon–Fri columns built by Sett.editUser() -->
+      </div>
     </div>
     <div id="mu-err" class="err-msg"></div>
     <div class="mfoot">
