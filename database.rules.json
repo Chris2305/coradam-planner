@@ -10,6 +10,9 @@
         ".write": "auth != null && (auth.token.email === 'c.nocher@coradam.com' || root.child('users').child(auth.uid).child('role').val() === 'super_admin' || auth.uid === $uid || (data.exists() && data.child('email').val() === auth.token.email && data.child('pending').val() === true))",
         "role": {
           ".write": "auth != null && (auth.token.email === 'c.nocher@coradam.com' || root.child('users').child(auth.uid).child('role').val() === 'super_admin')"
+        },
+        "managedControllerIds": {
+          ".write": "auth != null && (auth.token.email === 'c.nocher@coradam.com' || root.child('users').child(auth.uid).child('role').val() === 'super_admin')"
         }
       }
     },
@@ -18,12 +21,20 @@
     },
     "entries": {
       "$eid": {
-        ".write": "auth != null && (auth.token.email === 'c.nocher@coradam.com' || root.child('users').child(auth.uid).child('role').val() === 'super_admin' || (!data.exists() ? newData.child('userId').val() === auth.uid : data.child('userId').val() === auth.uid))"
+        ".write": "auth != null && (auth.token.email === 'c.nocher@coradam.com' || root.child('users').child(auth.uid).child('role').val() === 'super_admin' || (!data.exists() ? newData.child('userId').val() === auth.uid : data.child('userId').val() === auth.uid) || (root.child('users').child(auth.uid).child('role').val() === 'team_manager' && (!data.exists() ? root.child('users').child(auth.uid).child('managedControllerIds').child(newData.child('userId').val()).exists() : root.child('users').child(auth.uid).child('managedControllerIds').child(data.child('userId').val()).exists())))"
       }
     },
     "availability": {
       "$aid": {
-        ".write": "auth != null && (auth.token.email === 'c.nocher@coradam.com' || root.child('users').child(auth.uid).child('role').val() === 'super_admin' || (!data.exists() ? newData.child('userId').val() === auth.uid : data.child('userId').val() === auth.uid))"
+        ".write": "auth != null && (auth.token.email === 'c.nocher@coradam.com' || root.child('users').child(auth.uid).child('role').val() === 'super_admin' || (!data.exists() ? newData.child('userId').val() === auth.uid : data.child('userId').val() === auth.uid) || (root.child('users').child(auth.uid).child('role').val() === 'team_manager' && (!data.exists() ? root.child('users').child(auth.uid).child('managedControllerIds').child(newData.child('userId').val()).exists() : root.child('users').child(auth.uid).child('managedControllerIds').child(data.child('userId').val()).exists())))"
+      }
+    },
+    "documents": {
+      "$controllerUid": {
+        ".read": "auth != null && (auth.token.email === 'c.nocher@coradam.com' || root.child('users').child(auth.uid).child('role').val() === 'super_admin' || auth.uid === $controllerUid || (root.child('users').child(auth.uid).child('role').val() === 'team_manager' && root.child('users').child(auth.uid).child('managedControllerIds').child($controllerUid).exists()))",
+        "$docId": {
+          ".write": "auth != null && (auth.token.email === 'c.nocher@coradam.com' || root.child('users').child(auth.uid).child('role').val() === 'super_admin' || (root.child('users').child(auth.uid).child('role').val() === 'team_manager' && root.child('users').child(auth.uid).child('managedControllerIds').child($controllerUid).exists()))"
+        }
       }
     },
     "audit_log": {

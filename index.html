@@ -10,13 +10,14 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src 'self' https://www.gstatic.com https://apis.google.com https://*.firebasedatabase.app;
     style-src 'self';
     img-src 'self' data: https://lh3.googleusercontent.com https://*.googleusercontent.com https:;
-    connect-src 'self' https://www.gstatic.com https://*.googleapis.com https://*.firebaseapp.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://*.firebaseio.com wss://*.firebaseio.com https://securetoken.googleapis.com https://identitytoolkit.googleapis.com https://www.googleapis.com;
+    connect-src 'self' https://www.gstatic.com https://*.googleapis.com https://*.firebaseapp.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://*.firebaseio.com wss://*.firebaseio.com https://securetoken.googleapis.com https://identitytoolkit.googleapis.com https://www.googleapis.com https://firebasestorage.googleapis.com;
     frame-src 'self' https://accounts.google.com https://*.firebaseapp.com https://*.google.com;
     font-src 'self';
     object-src 'none';
@@ -306,10 +307,18 @@
 
       <div id="gt-users" class="gtab on">
         <div class="set-card">
-          <div class="set-head"><span>Team Controllers</span><button class="btn btn-p btn-sm" id="btn-invite-ctrl">+ Add Controller</button></div>
+          <div class="set-head"><span>Controllers</span><button class="btn btn-p btn-sm" id="btn-invite-ctrl">+ Add Team Member</button></div>
           <div class="ov-x-auto"><table class="utab">
             <thead><tr><th>Name</th><th>Email</th><th>Country</th><th>Clients</th><th>Status</th><th>Edit</th></tr></thead>
             <tbody id="u-tbody"></tbody>
+          </table></div>
+        </div>
+        <!-- Team Managers section (shown when at least one team_manager exists) -->
+        <div class="set-card set-card-mt" id="u-mgr-section" style="display:none">
+          <div class="set-head"><span>Team Managers</span></div>
+          <div class="ov-x-auto"><table class="utab">
+            <thead><tr><th>Name</th><th>Email</th><th>Assigned Controllers</th><th>Status</th><th>Edit</th></tr></thead>
+            <tbody id="u-mgr-tbody"></tbody>
           </table></div>
         </div>
       </div>
@@ -354,6 +363,53 @@
           <button class="btn btn-p btn-sm" id="btn-save-profile">Save</button>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════
+     MANAGER DASHBOARD (team_manager role)
+══════════════════════════════ -->
+<div id="s-mgr" class="screen">
+  <header class="hdr">
+    <div class="hdr-l">
+      <img src="coradam-logo.png" class="hdr-logo" alt="Coradam">
+      <span class="hdr-meta">Team Manager</span>
+    </div>
+    <div class="hdr-r">
+      <div class="hdr-actions hdr-actions-user">
+        <button class="btn btn-g btn-sm" id="btn-mgr-settings">⚙</button>
+        <button class="btn btn-g btn-sm" id="btn-signout-mgr">Sign out</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="mgr-wrap">
+    <!-- Controller selector tabs -->
+    <div class="mgr-ctrl-bar" id="mgr-ctrl-bar"></div>
+
+    <!-- Controller panel -->
+    <div class="mgr-panel" id="mgr-panel" style="display:none">
+      <div class="mgr-panel-head">
+        <div class="mgr-ctrl-name" id="mgr-ctrl-name"></div>
+        <div class="mgr-panel-actions">
+          <div class="mgr-nav" id="mgr-nav">
+            <button class="btn btn-s btn-sm" id="btn-mgr-prev">← Prev</button>
+            <span class="mgr-month-lbl" id="mgr-month-lbl"></span>
+            <button class="btn btn-s btn-sm" id="btn-mgr-next">Next →</button>
+          </div>
+          <button class="btn btn-p btn-sm" id="btn-mgr-book" style="display:none">+ Booking</button>
+          <button class="btn btn-avail btn-sm" id="btn-mgr-avail" style="display:none">🗓 Set Availability</button>
+        </div>
+      </div>
+
+      <div class="mgr-tabs">
+        <div class="mgr-tab on" id="mgr-tab-bookings">📌 Bookings</div>
+        <div class="mgr-tab" id="mgr-tab-avail">🗓 Availability</div>
+        <div class="mgr-tab" id="mgr-tab-docs">📁 Documents</div>
+      </div>
+
+      <div class="mgr-body" id="mgr-content-body"></div>
     </div>
   </div>
 </div>
@@ -465,6 +521,8 @@
   <div class="modal modal-lg">
     <div class="mtitle" id="ma-title">Set Availability</div>
     <input type="hidden" id="ma-id">
+    <input type="hidden" id="ma-for">
+    <div id="ma-for-note" class="booking-for-note" style="display:none">🗓 Setting availability for: <strong id="ma-for-label"></strong></div>
 
     <div class="fg">
       <label class="lbl">Status</label>
@@ -526,7 +584,7 @@
 <!-- User edit modal (admin) -->
 <div class="mov" id="m-user">
   <div class="modal">
-    <div class="mtitle" id="mu-title">Edit Controller</div>
+    <div class="mtitle" id="mu-title">Edit</div>
     <input type="hidden" id="mu-uid">
     <div class="fg"><label class="lbl">Country</label>
       <select id="mu-country" class="sel">
@@ -535,14 +593,26 @@
         <option>Portugal</option><option>Spain</option><option>India</option>
       </select>
     </div>
-    <div class="fg">
-      <label class="lbl">Assigned clients</label>
-      <div class="chk-list" id="mu-clients"></div>
+    <!-- Controller section: clients + weekly availability (for role=controller) -->
+    <div id="mu-client-section">
+      <div class="fg">
+        <label class="lbl">Assigned clients</label>
+        <div class="chk-list" id="mu-clients"></div>
+      </div>
     </div>
-    <div class="fg">
-      <label class="lbl">Default weekly availability</label>
-      <div class="av-week-grid" id="mu-avail-grid">
-        <!-- Mon–Fri columns built by Sett.editUser() -->
+    <div id="mu-avail-section">
+      <div class="fg">
+        <label class="lbl">Default weekly availability</label>
+        <div class="av-week-grid" id="mu-avail-grid">
+          <!-- Mon–Fri columns built by Sett.editUser() -->
+        </div>
+      </div>
+    </div>
+    <!-- Manager section: assigned controllers (for role=team_manager) -->
+    <div id="mu-ctrl-section" style="display:none">
+      <div class="fg">
+        <label class="lbl">Assigned controllers</label>
+        <div class="chk-list" id="mu-controllers"></div>
       </div>
     </div>
     <div id="mu-err" class="err-msg"></div>
@@ -553,15 +623,22 @@
   </div>
 </div>
 
-<!-- Invite controller modal -->
+<!-- Invite modal (controller or team manager) -->
 <div class="mov" id="m-invite">
   <div class="modal">
-    <div class="mtitle">Add Controller</div>
+    <div class="mtitle">Add Team Member</div>
     <div class="fg">
       <label class="lbl">Coradam email address</label>
       <input type="email" id="inv-email" class="inp" placeholder="firstname.lastname@coradam.com">
     </div>
     <div class="fg">
+      <label class="lbl">Role</label>
+      <select id="inv-role" class="sel">
+        <option value="controller">Controller</option>
+        <option value="team_manager">Team Manager</option>
+      </select>
+    </div>
+    <div class="fg" id="inv-country-wrap">
       <label class="lbl">Country</label>
       <select id="inv-country" class="sel">
         <option value="">Select…</option>

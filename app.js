@@ -91,7 +91,7 @@ const LS = {
 // ════════════════════════════════════
 // FIREBASE
 // ════════════════════════════════════
-let fapp, fauth, fdb;
+let fapp, fauth, fdb, fstorage;
 function fbRef(path){ return fdb.ref(path); }
 
 // Wraps any Firebase promise in a 15-second timeout so a broken or
@@ -114,7 +114,7 @@ async function fbPush(path,val){ const r=fbRef(path).push(); await fbTimeout(r.s
 // IN-MEMORY CACHE
 // ════════════════════════════════════
 const Cache = {
-  users:{}, clients:{}, entries:{}, availability:{},
+  users:{}, clients:{}, entries:{}, availability:{}, documents:{},
   async loadAll(){
     const [u,c,e,a]=await Promise.all([fbGet('users'),fbGet('clients'),fbGet('entries'),fbGet('availability')]);
     this.users=u||{}; this.clients=c||{}; this.entries=e||{}; this.availability=a||{};
@@ -124,7 +124,13 @@ const Cache = {
   entriesArr(){ return Object.values(this.entries); },
   availArr(){ return Object.values(this.availability); },
   clientsFor(uid){ return this.clientsArr().filter(c=>(c.userIds||[]).includes(uid)); },
-  availForUser(uid){ return this.availArr().filter(a=>a.userId===uid); }
+  availForUser(uid){ return this.availArr().filter(a=>a.userId===uid); },
+  documentsFor(controllerUid){ return Object.values(this.documents[controllerUid]||{}); },
+  async loadDocuments(controllerUid){
+    const docs=await fbGet(`documents/${controllerUid}`);
+    this.documents[controllerUid]=docs||{};
+    return this.documentsFor(controllerUid);
+  }
 };
 
 // ════════════════════════════════════
@@ -220,6 +226,7 @@ const App = {
     fapp = firebase.apps.length ? firebase.app() : firebase.initializeApp(cfg);
     fauth=firebase.auth();
     fdb=firebase.database();
+    if(typeof firebase.storage === 'function') fstorage=firebase.storage();
     // Early RTDB connectivity check — surfaces a clear error within 5s if the
     // database is unreachable (not created, wrong URL, or network blocked).
     // Firebase's .info/connected is a WebSocket-based indicator; if it doesn't
@@ -329,6 +336,7 @@ const App = {
       if(u.photo){ img.src=u.photo; img.style.display=''; } else img.style.display='none';
     });
     if(u.role==='super_admin'){ this._goAdmin(); }
+    else if(u.role==='team_manager'){ this._goManager(); }
     else { this._goCalendar(); }
     // Show Freshbooks OAuth result toasts
     if(this._fbConnected){ this._fbConnected=false; setTimeout(()=>toast('Freshbooks connected! Go to Settings → Freshbooks to sync clients.','ok'),400); }
@@ -346,10 +354,14 @@ const App = {
     show('adm'); Adm.init();
   },
 
+  _goManager(){
+    show('mgr'); Mgr.init();
+  },
+
   goSettings(){
     const u=this.user;
     document.getElementById('set-admin-tabs').style.display=u.role==='super_admin'?'block':'none';
-    document.getElementById('set-profile').style.display=u.role==='controller'?'block':'none';
+    document.getElementById('set-profile').style.display=(u.role==='controller'||u.role==='team_manager')?'block':'none';
     if(u.role==='super_admin') Sett.tab('users');
     else { document.getElementById('profile-country').value=u.country||''; }
     show('set');
@@ -362,6 +374,8 @@ const App = {
       show('adm');
       // Re-render without resetting month/filters: Adm.init() would jump back to today.
       Adm._buildCountryBar(); Adm._fillFilterOpts(); Adm.applyFilters();
+    } else if(this.user?.role==='team_manager'){
+      show('mgr'); Mgr.init();
     } else{ show('cal'); }
   },
 
@@ -600,10 +614,17 @@ const Cal = {
 // ════════════════════════════════════
 const Slot = {
   _isAdmin(){ return App.user?.role==='super_admin'; },
+  // Returns true if the current user may create/edit/delete entries for forUid
+  _canManage(forUid){
+    const u=App.user; if(!u) return false;
+    if(u.role==='super_admin') return true;
+    if(u.role==='team_manager') return !!(u.managedControllerIds||{})[forUid];
+    return u.uid===forUid;
+  },
   _setForUser(uid){
     document.getElementById('ms-for').value=uid||'';
     const nameEl=document.getElementById('ms-for-name');
-    if(uid && this._isAdmin()){
+    if(uid && (this._isAdmin()||App.user?.role==='team_manager')){
       const u=Cache.users[uid];
       document.getElementById('ms-for-label').textContent=(u?.name||uid)+(u?.country?' — '+u.country:'');
       nameEl.style.display='block';
@@ -627,7 +648,7 @@ const Slot = {
   },
   edit(id){
     const e=Cache.entries[id]; if(!e) return;
-    if(!this._isAdmin() && e.userId!==App.user.uid) return;
+    if(!this._canManage(e.userId)) return;
     this._reset();
     document.getElementById('ms-title').textContent='Edit Booking';
     document.getElementById('ms-id').value=id;
@@ -803,7 +824,9 @@ const Slot = {
         const entry={...base,id:eid,userId:targetUid,userName:targetUser.name,userEmail:targetUser.email,userCountry:targetUser.country||'',date,slot:type,clientId:cid,clientName:c?.name||'',factory:fac,expectedQty:eqty,finalQty:fqty,notes,updated:Date.now(),created:base.created||Date.now()};
         await fbSet(`entries/${eid}`,entry); Cache.entries[eid]=entry;
         M.close('m-slot');
-        if(this._isAdmin()){ Adm.refresh(); } else { Cal.render(); }
+        if(this._isAdmin()){ Adm.refresh(); }
+        else if(App.user?.role==='team_manager'){ Mgr.refresh(); }
+        else { Cal.render(); }
         toast(id?'Booking updated.':'Booking saved.');
       } catch(e){ toast('Save failed: '+e.message,'err'); }
       finally{ Spin.off(); }
@@ -831,7 +854,9 @@ const Slot = {
         await fbSet(`entries/${eid}`,entry); Cache.entries[eid]=entry;
       }
       M.close('m-slot');
-      if(this._isAdmin()){ Adm.refresh(); } else { Cal.render(); }
+      if(this._isAdmin()){ Adm.refresh(); }
+      else if(App.user?.role==='team_manager'){ Mgr.refresh(); }
+      else { Cal.render(); }
       const msg=skipped.length
         ?`${toCreate.length} booking${toCreate.length>1?'s':''} created. ${skipped.length} skipped (conflict).`
         :`${toCreate.length} booking${toCreate.length>1?'s':''} created.`;
@@ -847,7 +872,9 @@ const Slot = {
       await fbDel(`entries/${id}`);
       delete Cache.entries[id];
       M.close('m-slot');
-      if(this._isAdmin()){ Adm.refresh(); } else { Cal.render(); }
+      if(this._isAdmin()){ Adm.refresh(); }
+      else if(App.user?.role==='team_manager'){ Mgr.refresh(); }
+      else { Cal.render(); }
       toast('Booking deleted.');
     } catch(e){ toast('Delete failed.','err'); }
     finally{ Spin.off(); }
@@ -858,9 +885,16 @@ const Slot = {
 // AVAILABILITY
 // ════════════════════════════════════
 const Avail = {
-  openForDate(date, existingRule=null){
+  openForDate(date, existingRule=null, forUid=null){
     this._reset();
     document.getElementById('ma-title').textContent=existingRule?'Edit Availability':'Set Availability — '+U.fmt(date);
+    document.getElementById('ma-for').value=forUid||'';
+    const noteEl=document.getElementById('ma-for-note');
+    if(forUid && App.user?.role==='team_manager'){
+      const u=Cache.users[forUid];
+      document.getElementById('ma-for-label').textContent=u?u.name:forUid;
+      noteEl.style.display='block';
+    } else { noteEl.style.display='none'; }
     if(existingRule){
       document.getElementById('ma-id').value=existingRule.id||'';
       document.getElementById('ma-del').style.display='inline-flex';
@@ -880,9 +914,16 @@ const Avail = {
     }
     M.open('m-avail');
   },
-  openBulk(){
+  openBulk(forUid=null){
     this._reset();
     document.getElementById('ma-title').textContent='Set Availability';
+    document.getElementById('ma-for').value=forUid||'';
+    const noteEl=document.getElementById('ma-for-note');
+    if(forUid && App.user?.role==='team_manager'){
+      const u=Cache.users[forUid];
+      document.getElementById('ma-for-label').textContent=u?u.name:forUid;
+      noteEl.style.display='block';
+    } else { noteEl.style.display='none'; }
     document.getElementById('ma-date').value=U.today();
     document.getElementById('ma-from').value=U.today();
     this.pickSlot('Full Day');
@@ -908,6 +949,7 @@ const Avail = {
   },
   _reset(){
     document.getElementById('ma-id').value='';
+    document.getElementById('ma-for').value='';
     document.getElementById('ma-type').value='';
     document.getElementById('ma-slot').value='';
     document.getElementById('ma-repeat').value='none';
@@ -918,6 +960,7 @@ const Avail = {
     document.getElementById('ma-note').value='';
     document.getElementById('ma-err').style.display='none';
     document.getElementById('ma-del').style.display='none';
+    document.getElementById('ma-for-note').style.display='none';
     ['av-yes','av-no'].forEach(id=>document.getElementById(id).className='av-btn');
     ['ma-sb-f','ma-sb-a','ma-sb-p'].forEach(id=>document.getElementById(id).className='slt-btn');
     this.onRepeatChange();
@@ -948,14 +991,16 @@ const Avail = {
       }
     }
 
-    const u=App.user;
+    const targetUid=document.getElementById('ma-for').value||App.user.uid;
+    const u=Cache.users[targetUid]||App.user;
     Spin.on();
     try{
       const aid=id||U.uuid();
-      const rule={id:aid,userId:u.uid,userName:u.name,userCountry:u.country||'',startDate,endDate,slot,type,repeatMode,repeatUntil,note,created:Date.now()};
+      const rule={id:aid,userId:targetUid,userName:u.name,userCountry:u.country||'',startDate,endDate,slot,type,repeatMode,repeatUntil,note,created:Date.now()};
       await fbSet(`availability/${aid}`,rule);
       Cache.availability[aid]=rule;
-      M.close('m-avail'); Cal.render();
+      M.close('m-avail');
+      if(App.user?.role==='team_manager'){ Mgr.refresh(); } else { Cal.render(); }
       toast('Availability saved.');
     } catch(e){ toast('Save failed: '+e.message,'err'); }
     finally{ Spin.off(); }
@@ -967,7 +1012,8 @@ const Avail = {
     try{
       await fbDel(`availability/${id}`);
       delete Cache.availability[id];
-      M.close('m-avail'); Cal.render();
+      M.close('m-avail');
+      if(App.user?.role==='team_manager'){ Mgr.refresh(); } else { Cal.render(); }
       toast('Rule deleted.');
     } catch(e){ toast('Delete failed.','err'); }
     finally{ Spin.off(); }
@@ -1350,32 +1396,63 @@ const Sett = {
   init(){ this.tab(this._tab); },
 
   _renderUsers(){
-    const users=Cache.usersArr().filter(u=>u.role!=='super_admin').sort((a,b)=>(a.country||'').localeCompare(b.country||'')||a.name.localeCompare(b.name));
-    if(!users.length){ document.getElementById('u-tbody').innerHTML=`<tr><td colspan="6" class="tbl-empty">No controllers yet. Click "+ Add Controller" to pre-register them by email.</td></tr>`; return; }
-    document.getElementById('u-tbody').innerHTML=users.map(u=>{
-      const uClients=Cache.clientsArr().filter(c=>(c.userIds||[]).includes(u.uid)).map(c=>U.esc(c.name)).join(', ')||'<span class="tbl-qty-dash">none</span>';
-      const statusBadge=u.pending?'<span class="badge badge-pending">Pending</span>':`<span class="badge ${u.active?'b-on':'b-off'}">${u.active?'Active':'Inactive'}</span>`;
-      return `<tr><td><strong>${U.esc(u.name||u.email.split('@')[0])}</strong></td><td class="tbl-email">${U.esc(u.email)}</td><td>${u.country?U.flag(u.country)+' '+U.esc(u.country):'<span class="tbl-qty-dash">—</span>'}</td><td class="tbl-email">${uClients}</td><td>${statusBadge}</td><td class="tbl-nowrap"><button class="btn btn-s btn-sm" data-action="edit" data-uid="${U.esc(u.uid)}">Edit</button> <button class="btn btn-d btn-sm" data-action="delete" data-uid="${U.esc(u.uid)}">Delete</button></td></tr>`;
-    }).join('');
-    // Bind buttons — onclick attributes in innerHTML are blocked by CSP
-    document.getElementById('u-tbody').querySelectorAll('button[data-action]').forEach(btn=>{
-      btn.addEventListener('click',()=>{
-        if(btn.dataset.action==='edit') Sett.editUser(btn.dataset.uid);
-        else if(btn.dataset.action==='delete') Sett.deleteUser(btn.dataset.uid);
+    // ── Controllers ──
+    const controllers=Cache.usersArr().filter(u=>u.role==='controller').sort((a,b)=>(a.country||'').localeCompare(b.country||'')||a.name.localeCompare(b.name));
+    if(!controllers.length){
+      document.getElementById('u-tbody').innerHTML=`<tr><td colspan="6" class="tbl-empty">No controllers yet. Click "+ Add Team Member" to pre-register them by email.</td></tr>`;
+    } else {
+      document.getElementById('u-tbody').innerHTML=controllers.map(u=>{
+        const uClients=Cache.clientsArr().filter(c=>(c.userIds||[]).includes(u.uid)).map(c=>U.esc(c.name)).join(', ')||'<span class="tbl-qty-dash">none</span>';
+        const statusBadge=u.pending?'<span class="badge badge-pending">Pending</span>':`<span class="badge ${u.active?'b-on':'b-off'}">${u.active?'Active':'Inactive'}</span>`;
+        return `<tr><td><strong>${U.esc(u.name||u.email.split('@')[0])}</strong></td><td class="tbl-email">${U.esc(u.email)}</td><td>${u.country?U.flag(u.country)+' '+U.esc(u.country):'<span class="tbl-qty-dash">—</span>'}</td><td class="tbl-email">${uClients}</td><td>${statusBadge}</td><td class="tbl-nowrap"><button class="btn btn-s btn-sm" data-action="edit" data-uid="${U.esc(u.uid)}">Edit</button> <button class="btn btn-d btn-sm" data-action="delete" data-uid="${U.esc(u.uid)}">Delete</button></td></tr>`;
+      }).join('');
+      document.getElementById('u-tbody').querySelectorAll('button[data-action]').forEach(btn=>{
+        btn.addEventListener('click',()=>{
+          if(btn.dataset.action==='edit') Sett.editUser(btn.dataset.uid);
+          else if(btn.dataset.action==='delete') Sett.deleteUser(btn.dataset.uid);
+        });
       });
-    });
+    }
+    // ── Team Managers ──
+    const managers=Cache.usersArr().filter(u=>u.role==='team_manager').sort((a,b)=>a.name.localeCompare(b.name));
+    const mgrSection=document.getElementById('u-mgr-section');
+    if(managers.length){
+      mgrSection.style.display='block';
+      document.getElementById('u-mgr-tbody').innerHTML=managers.map(u=>{
+        const assignedCtrls=Object.keys(u.managedControllerIds||{}).map(id=>Cache.users[id]?.name||'').filter(Boolean).join(', ')||'<span class="tbl-qty-dash">none</span>';
+        const statusBadge=u.pending?'<span class="badge badge-pending">Pending</span>':`<span class="badge ${u.active?'b-on':'b-off'}">${u.active?'Active':'Inactive'}</span>`;
+        return `<tr><td><strong>${U.esc(u.name||u.email.split('@')[0])}</strong></td><td class="tbl-email">${U.esc(u.email)}</td><td class="tbl-email">${assignedCtrls}</td><td>${statusBadge}</td><td class="tbl-nowrap"><button class="btn btn-s btn-sm" data-action="edit" data-uid="${U.esc(u.uid)}">Edit</button> <button class="btn btn-d btn-sm" data-action="delete" data-uid="${U.esc(u.uid)}">Delete</button></td></tr>`;
+      }).join('');
+      document.getElementById('u-mgr-tbody').querySelectorAll('button[data-action]').forEach(btn=>{
+        btn.addEventListener('click',()=>{
+          if(btn.dataset.action==='edit') Sett.editUser(btn.dataset.uid);
+          else if(btn.dataset.action==='delete') Sett.deleteUser(btn.dataset.uid);
+        });
+      });
+    } else {
+      mgrSection.style.display='none';
+    }
   },
 
   openInvite(){
     document.getElementById('inv-email').value='';
+    document.getElementById('inv-role').value='controller';
     document.getElementById('inv-country').value='';
+    document.getElementById('inv-country-wrap').style.display='block';
     document.getElementById('inv-err').style.display='none';
     M.open('m-invite');
   },
 
+  // Show/hide country field based on role (team managers don't need a country)
+  onInviteRoleChange(){
+    const role=document.getElementById('inv-role').value;
+    document.getElementById('inv-country-wrap').style.display=role==='controller'?'block':'none';
+  },
+
   async inviteController(){
     const email=document.getElementById('inv-email').value.trim().toLowerCase();
-    const country=document.getElementById('inv-country').value;
+    const role=document.getElementById('inv-role').value||'controller';
+    const country=role==='controller'?document.getElementById('inv-country').value:'';
     const err=document.getElementById('inv-err');
     err.style.display='none';
     if(!email){ err.textContent='Please enter an email address.'; err.style.display='block'; return; }
@@ -1385,9 +1462,11 @@ const Sett = {
     try{
       const uid='pending_'+U.uuid();
       const name=email.split('@')[0].replace(/\./g,' ').replace(/\b\w/g,c=>c.toUpperCase());
-      const profile={uid,email,name,country,role:'controller',active:true,pending:true,created:Date.now()};
+      const profile={uid,email,name,country,role,active:true,pending:true,created:Date.now()};
+      if(role==='team_manager') profile.managedControllerIds={};
       await fbSet(`users/${uid}`,profile); Cache.users[uid]=profile;
-      M.close('m-invite'); this._renderUsers(); toast('Controller added.');
+      M.close('m-invite'); this._renderUsers();
+      toast(role==='team_manager'?'Team manager added.':'Controller added.');
     } catch(e){ err.textContent='Save failed: '+(e?.message||e); err.style.display='block'; }
     finally{ Spin.off(); }
   },
@@ -1398,30 +1477,45 @@ const Sett = {
     document.getElementById('mu-uid').value=uid;
     document.getElementById('mu-country').value=u.country||'';
     document.getElementById('mu-err').style.display='none';
-    // Fill client checkboxes
-    const clients=Cache.clientsArr();
-    document.getElementById('mu-clients').innerHTML=clients.length?clients.map(c=>`<label class="chk-item"><input type="checkbox" value="${c.id}" ${(c.userIds||[]).includes(uid)?'checked':''}>${U.esc(c.name)}</label>`).join(''):'<div class="no-items">No clients yet.</div>';
-    // Build weekly availability grid (Mon=0 … Fri=4, Monday-first convention)
-    const wa=u.weeklyAvail||{0:{am:true,pm:true},1:{am:true,pm:true},2:{am:true,pm:true},3:{am:true,pm:true},4:{am:true,pm:true},5:{am:false,pm:false},6:{am:false,pm:false}};
-    const DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-    const grid=document.getElementById('mu-avail-grid');
-    grid.innerHTML='';
-    DAYS.forEach((lbl,i)=>{
-      const col=el('div','av-week-col');
-      const day=el('div','av-week-lbl'); day.textContent=lbl;
-      const amBar=el('div','av-week-half'+(wa[i]?.am?' on-am':'')); amBar.dataset.wd=i; amBar.dataset.half='am'; amBar.title=lbl+' AM';
-      const pmBar=el('div','av-week-half'+(wa[i]?.pm?' on-pm':'')); pmBar.dataset.wd=i; pmBar.dataset.half='pm'; pmBar.title=lbl+' PM';
-      const sub=el('div','av-week-sub'); sub.textContent='AM / PM';
-      col.append(day,amBar,pmBar,sub);
-      grid.appendChild(col);
-    });
-    // Bind toggle events (re-attached each open to avoid stale listeners)
-    grid.querySelectorAll('.av-week-half').forEach(b=>{
-      b.addEventListener('click',()=>{
-        if(b.dataset.half==='am') b.classList.toggle('on-am');
-        else b.classList.toggle('on-pm');
+
+    const isManager=u.role==='team_manager';
+    // Show/hide sections based on role
+    document.getElementById('mu-client-section').style.display=isManager?'none':'block';
+    document.getElementById('mu-avail-section').style.display=isManager?'none':'block';
+    document.getElementById('mu-ctrl-section').style.display=isManager?'block':'none';
+
+    if(isManager){
+      // Build controller assignment checkboxes
+      const activeControllers=Cache.usersArr().filter(c=>c.role==='controller'&&c.active);
+      document.getElementById('mu-controllers').innerHTML=activeControllers.length
+        ?activeControllers.map(c=>`<label class="chk-item"><input type="checkbox" value="${U.esc(c.uid)}" ${!!(u.managedControllerIds||{})[c.uid]?'checked':''}>${U.esc(c.name)}${c.country?' '+U.flag(c.country):''}</label>`).join('')
+        :'<div class="no-items">No active controllers yet.</div>';
+    } else {
+      // Fill client checkboxes
+      const clients=Cache.clientsArr();
+      document.getElementById('mu-clients').innerHTML=clients.length?clients.map(c=>`<label class="chk-item"><input type="checkbox" value="${c.id}" ${(c.userIds||[]).includes(uid)?'checked':''}>${U.esc(c.name)}</label>`).join(''):'<div class="no-items">No clients yet.</div>';
+      // Build weekly availability grid (Mon=0 … Fri=4, Monday-first convention)
+      const wa=u.weeklyAvail||{0:{am:true,pm:true},1:{am:true,pm:true},2:{am:true,pm:true},3:{am:true,pm:true},4:{am:true,pm:true},5:{am:false,pm:false},6:{am:false,pm:false}};
+      const DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+      const grid=document.getElementById('mu-avail-grid');
+      grid.innerHTML='';
+      DAYS.forEach((lbl,i)=>{
+        const col=el('div','av-week-col');
+        const day=el('div','av-week-lbl'); day.textContent=lbl;
+        const amBar=el('div','av-week-half'+(wa[i]?.am?' on-am':'')); amBar.dataset.wd=i; amBar.dataset.half='am'; amBar.title=lbl+' AM';
+        const pmBar=el('div','av-week-half'+(wa[i]?.pm?' on-pm':'')); pmBar.dataset.wd=i; pmBar.dataset.half='pm'; pmBar.title=lbl+' PM';
+        const sub=el('div','av-week-sub'); sub.textContent='AM / PM';
+        col.append(day,amBar,pmBar,sub);
+        grid.appendChild(col);
       });
-    });
+      // Bind toggle events (re-attached each open to avoid stale listeners)
+      grid.querySelectorAll('.av-week-half').forEach(b=>{
+        b.addEventListener('click',()=>{
+          if(b.dataset.half==='am') b.classList.toggle('on-am');
+          else b.classList.toggle('on-pm');
+        });
+      });
+    }
     M.open('m-user');
   },
 
@@ -1455,9 +1549,27 @@ const Sett = {
 
   async saveUser(){
     const uid=document.getElementById('mu-uid').value;
+    const u=Cache.users[uid]; if(!u) return;
     const country=document.getElementById('mu-country').value;
     const err=document.getElementById('mu-err');
     err.style.display='none';
+
+    // ── Team manager: only save country + controller assignments ──
+    if(u.role==='team_manager'){
+      const checkedControllerIds=[...document.querySelectorAll('#mu-controllers input:checked')].map(cb=>cb.value);
+      // Store as a map {uid: true} — required for Firebase RTDB rules to check membership via .child(uid).exists()
+      const managedControllerIds=Object.fromEntries(checkedControllerIds.map(id=>[id,true]));
+      Spin.on();
+      try{
+        const updated={...u,country,managedControllerIds};
+        await fbSet(`users/${uid}`,updated); Cache.users[uid]=updated;
+        M.close('m-user'); this._renderUsers(); toast('Team manager updated.');
+      } catch(e){ log.error('saveUser(manager) error',e); err.textContent='Save failed: '+(e?.message||e); err.style.display='block'; }
+      finally{ Spin.off(); }
+      return;
+    }
+
+    // ── Controller: existing save logic ──
     const checkedClientIds=[...document.querySelectorAll('#mu-clients input:checked')].map(cb=>cb.value);
     // Collect weeklyAvail from the grid
     const weeklyAvail={};
@@ -1470,8 +1582,8 @@ const Sett = {
     Spin.on();
     try{
       // Update user country + weeklyAvail
-      const u={...Cache.users[uid],country,weeklyAvail};
-      await fbSet(`users/${uid}`,u); Cache.users[uid]=u;
+      const updated={...u,country,weeklyAvail};
+      await fbSet(`users/${uid}`,updated); Cache.users[uid]=updated;
       // Sync weekly availability rules (creates repeating "available" rules for 10 years)
       await this._syncWeeklyAvailRules(uid, weeklyAvail);
       // Update client assignments
@@ -1480,8 +1592,8 @@ const Sett = {
         const shouldBeIn=checkedClientIds.includes(c.id);
         if(wasIn!==shouldBeIn){
           const newIds=shouldBeIn?[...(c.userIds||[]),uid]:(c.userIds||[]).filter(id=>id!==uid);
-          const updated={...c,userIds:newIds};
-          await fbSet(`clients/${c.id}`,updated); Cache.clients[c.id]=updated;
+          const updated2={...c,userIds:newIds};
+          await fbSet(`clients/${c.id}`,updated2); Cache.clients[c.id]=updated2;
         }
       }
       M.close('m-user'); this._renderUsers(); toast('Controller updated — availability rules applied for 10 years.');
@@ -2083,11 +2195,261 @@ const Rpt = {
 };
 
 // ════════════════════════════════════
+// MANAGER DASHBOARD (team_manager role)
+// ════════════════════════════════════
+const Mgr = {
+  _uid: null,   // selected controller uid
+  _tab: 'bookings', // 'bookings' | 'avail' | 'docs'
+  _cur: new Date(),
+
+  init(){
+    this._cur=new Date();
+    const ctrls=this._myControllers();
+    // Reset to first controller if current is not in list
+    if(!this._uid||!ctrls.find(u=>u.uid===this._uid)){
+      this._uid=ctrls[0]?.uid||null;
+    }
+    this._tab='bookings';
+    this._render();
+  },
+
+  refresh(){
+    this._render();
+  },
+
+  _myControllers(){
+    const ids=Object.keys(App.user?.managedControllerIds||{});
+    return ids.map(uid=>Cache.users[uid]).filter(u=>u&&u.active);
+  },
+
+  _render(){
+    this._renderCtrlTabs();
+    this._renderPanel();
+  },
+
+  _renderCtrlTabs(){
+    const ctrls=this._myControllers();
+    const bar=document.getElementById('mgr-ctrl-bar');
+    if(!ctrls.length){
+      bar.innerHTML='<div class="mgr-no-ctrls">No controllers assigned yet — ask an administrator to assign you controllers.</div>';
+      return;
+    }
+    bar.innerHTML=ctrls.map(u=>
+      `<button class="mgr-ctrl-btn${this._uid===u.uid?' active':''}" data-uid="${U.esc(u.uid)}">${U.esc(u.name)}${u.country?' '+U.flag(u.country):''}</button>`
+    ).join('');
+    bar.querySelectorAll('.mgr-ctrl-btn').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        this._uid=btn.dataset.uid;
+        this._tab='bookings';
+        this._render();
+      });
+    });
+  },
+
+  _renderPanel(){
+    if(!this._uid){
+      document.getElementById('mgr-panel').style.display='none';
+      return;
+    }
+    document.getElementById('mgr-panel').style.display='block';
+    const u=Cache.users[this._uid];
+    document.getElementById('mgr-ctrl-name').textContent=(u?.name||'Controller')+(u?.country?' — '+u.country:'');
+    document.getElementById('mgr-month-lbl').textContent=U.monthLabel(this._cur);
+    // Tab active state
+    ['bookings','avail','docs'].forEach(t=>{
+      document.getElementById('mgr-tab-'+t).classList.toggle('on',this._tab===t);
+    });
+    // Show/hide nav (only for bookings and avail)
+    document.getElementById('mgr-nav').style.display=(this._tab==='docs')?'none':'flex';
+    // Show/hide add buttons
+    document.getElementById('btn-mgr-book').style.display=(this._tab==='bookings')?'inline-flex':'none';
+    document.getElementById('btn-mgr-avail').style.display=(this._tab==='avail')?'inline-flex':'none';
+    // Render content
+    if(this._tab==='bookings') this._renderBookings();
+    else if(this._tab==='avail') this._renderAvail();
+    else this._renderDocs();
+  },
+
+  setTab(t){ this._tab=t; this._renderPanel(); },
+
+  prev(){
+    this._cur=new Date(this._cur.getFullYear(),this._cur.getMonth()-1,1);
+    this._renderPanel();
+  },
+  next(){
+    this._cur=new Date(this._cur.getFullYear(),this._cur.getMonth()+1,1);
+    this._renderPanel();
+  },
+
+  addBooking(){
+    if(!this._uid) return;
+    Slot.add(U.today(), this._uid);
+  },
+
+  addAvail(){
+    if(!this._uid) return;
+    Avail.openBulk(this._uid);
+  },
+
+  _renderBookings(){
+    const mStr=U.monthKey(this._cur);
+    const entries=Cache.entriesArr()
+      .filter(e=>e.userId===this._uid&&e.date?.startsWith(mStr))
+      .sort((a,b)=>a.date.localeCompare(b.date));
+    let html='';
+    if(!entries.length){
+      html='<div class="mgr-empty-list">No bookings this month. Click "+ Booking" to add one.</div>';
+    } else {
+      entries.forEach(e=>{
+        const cls=U.slotCls(e.slot);
+        html+=`<div class="mgr-entry-row">
+          <div class="mgr-entry-date">${U.fmt(e.date)}</div>
+          <div class="mgr-entry-slot"><span class="chip c-${U.esc(cls)}">${U.esc(e.slot)}</span></div>
+          <div class="mgr-entry-detail">${U.esc(e.clientName||'')}${e.factory?' &mdash; '+U.esc(e.factory):''}</div>
+          <button class="btn btn-s btn-sm mgr-edit-btn" data-id="${U.esc(e.id)}">Edit</button>
+        </div>`;
+      });
+    }
+    document.getElementById('mgr-content-body').innerHTML=html;
+    document.querySelectorAll('.mgr-edit-btn').forEach(btn=>{
+      btn.addEventListener('click',()=>Slot.edit(btn.dataset.id));
+    });
+  },
+
+  _renderAvail(){
+    const rules=Cache.availArr()
+      .filter(a=>a.userId===this._uid)
+      .sort((a,b)=>a.startDate.localeCompare(b.startDate));
+    let html='';
+    if(!rules.length){
+      html='<div class="mgr-empty-list">No availability rules. Click "🗓 Set Availability" to add one.</div>';
+    } else {
+      rules.forEach(r=>{
+        const typeIcon=r.type==='available'?'✅':'🚫';
+        const repeatLabel=r.repeatMode&&r.repeatMode!=='none'?' · '+r.repeatMode:'';
+        const dateStr=r.endDate?`${U.fmt(r.startDate)} – ${U.fmt(r.endDate)}`:U.fmt(r.startDate);
+        html+=`<div class="mgr-avail-row">
+          <div class="mgr-avail-icon">${typeIcon}</div>
+          <div class="mgr-avail-info">
+            <div class="mgr-avail-date">${dateStr}${repeatLabel}</div>
+            <div class="mgr-avail-slot">${U.esc(r.slot||'')}${r.note?' — '+U.esc(r.note):''}</div>
+          </div>
+        </div>`;
+      });
+    }
+    document.getElementById('mgr-content-body').innerHTML=html;
+  },
+
+  async _renderDocs(){
+    document.getElementById('mgr-content-body').innerHTML='<div class="mgr-loading">Loading…</div>';
+    try{
+      const docs=await Cache.loadDocuments(this._uid);
+      const ctrl=Cache.users[this._uid];
+      let html=`<div class="mgr-docs-toolbar">
+        <span class="mgr-docs-folder">📁 ${U.esc(ctrl?.name||'Controller')}</span>
+        <label class="btn btn-p btn-sm" for="mgr-doc-input">⬆ Upload document</label>
+        <input type="file" id="mgr-doc-input" accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.jpg,.jpeg,.png,.gif,.webp" style="display:none">
+      </div>
+      <div id="mgr-doc-status" class="mgr-doc-status"></div>`;
+      if(!docs.length){
+        html+='<div class="mgr-empty-list">No documents yet. Upload PDFs, images or Word docs.</div>';
+      } else {
+        const sorted=[...docs].sort((a,b)=>b.created-a.created);
+        sorted.forEach(d=>{
+          const ico=d.contentType?.startsWith('image')?'🖼':d.contentType?.includes('pdf')?'📄':(d.contentType?.includes('spreadsheet')||d.contentType?.includes('excel'))?'📊':d.name?.endsWith('.docx')||d.name?.endsWith('.doc')?'📝':'📎';
+          html+=`<div class="mgr-doc-row">
+            <span class="mgr-doc-ico">${ico}</span>
+            <a href="${U.esc(d.downloadURL)}" target="_blank" rel="noopener" class="mgr-doc-name">${U.esc(d.name)}</a>
+            <span class="mgr-doc-by">by ${U.esc(d.uploadedByName||'')}</span>
+            <button class="btn btn-d btn-sm mgr-doc-del" data-id="${U.esc(d.id)}">Delete</button>
+          </div>`;
+        });
+      }
+      document.getElementById('mgr-content-body').innerHTML=html;
+      // Bind upload input
+      const inp=document.getElementById('mgr-doc-input');
+      inp.addEventListener('change',()=>Docs.upload(inp, this._uid));
+      // Bind delete buttons
+      document.querySelectorAll('.mgr-doc-del').forEach(btn=>{
+        btn.addEventListener('click',()=>Docs.del(btn.dataset.id, this._uid));
+      });
+    } catch(e){ document.getElementById('mgr-content-body').innerHTML=`<div class="mgr-empty-list err-text">Failed to load documents: ${U.esc(e.message)}</div>`; }
+  }
+};
+
+// ════════════════════════════════════
+// DOCS (Firebase Storage — per controller documents)
+// ════════════════════════════════════
+const Docs = {
+  async upload(input, controllerUid){
+    const file=input.files[0]; if(!file) return;
+    if(!fstorage){ toast('Firebase Storage is not initialised. Check index.html for the Storage SDK script.','err'); return; }
+    const statusEl=document.getElementById('mgr-doc-status');
+    if(statusEl){ statusEl.textContent='Uploading…'; statusEl.className='mgr-doc-status uploading'; }
+    Spin.on();
+    try{
+      const docId=U.uuid();
+      // Sanitise filename — remove path traversal chars, keep extension
+      const safeName=file.name.replace(/[^a-zA-Z0-9._\- ]/g,'_').slice(0,200)||'document';
+      const storePath=`documents/${controllerUid}/${docId}/${safeName}`;
+      const storageRef=fstorage.ref(storePath);
+      await storageRef.put(file,{contentType:file.type||'application/octet-stream'});
+      const downloadURL=await storageRef.getDownloadURL();
+      const meta={
+        id:docId,
+        controllerUid,
+        controllerName:Cache.users[controllerUid]?.name||'',
+        name:safeName,
+        storagePath:storePath,
+        downloadURL,
+        contentType:file.type||'application/octet-stream',
+        size:file.size,
+        uploadedBy:App.user.uid,
+        uploadedByName:App.user.name,
+        created:Date.now()
+      };
+      await fbSet(`documents/${controllerUid}/${docId}`,meta);
+      if(!Cache.documents[controllerUid]) Cache.documents[controllerUid]={};
+      Cache.documents[controllerUid][docId]=meta;
+      if(statusEl){ statusEl.textContent='Uploaded successfully!'; statusEl.className='mgr-doc-status ok'; setTimeout(()=>{ statusEl.textContent=''; statusEl.className='mgr-doc-status'; },3000); }
+      Mgr._renderDocs();
+      toast('Document uploaded.');
+    } catch(e){ if(statusEl){ statusEl.textContent='Upload failed: '+e.message; statusEl.className='mgr-doc-status err'; } toast('Upload failed: '+e.message,'err'); }
+    finally{ Spin.off(); input.value=''; }
+  },
+
+  async del(docId, controllerUid){
+    const meta=Cache.documents[controllerUid]?.[docId];
+    if(!meta||!confirm('Delete "'+meta.name+'"? This cannot be undone.')) return;
+    Spin.on();
+    try{
+      if(meta.storagePath && fstorage) await fstorage.ref(meta.storagePath).delete();
+      await fbDel(`documents/${controllerUid}/${docId}`);
+      delete Cache.documents[controllerUid][docId];
+      Mgr._renderDocs();
+      toast('Document deleted.');
+    } catch(e){ toast('Delete failed: '+e.message,'err'); }
+    finally{ Spin.off(); }
+  }
+};
+
+// ════════════════════════════════════
 // EVENT BINDINGS (replaces inline onclick/onchange)
 // All handlers are attached here so the CSP can forbid unsafe-inline scripts.
 // ════════════════════════════════════
 function _bindEvents(){
   function on(id, evt, fn){ const el=document.getElementById(id); if(el) el.addEventListener(evt,fn); }
+
+  // ── Manager screen ──
+  on('btn-signout-mgr', 'click', ()=>Auth.signOut());
+  on('btn-mgr-settings','click', ()=>App.goSettings());
+  on('btn-mgr-prev',    'click', ()=>Mgr.prev());
+  on('btn-mgr-next',    'click', ()=>Mgr.next());
+  on('btn-mgr-book',   'click', ()=>Mgr.addBooking());
+  on('btn-mgr-avail',  'click', ()=>Mgr.addAvail());
+  on('mgr-tab-bookings','click', ()=>Mgr.setTab('bookings'));
+  on('mgr-tab-avail',   'click', ()=>Mgr.setTab('avail'));
+  on('mgr-tab-docs',    'click', ()=>Mgr.setTab('docs'));
 
   // ── Setup screen ──
   on('btn-setup-save',  'click', ()=>Setup.connect());
@@ -2181,9 +2543,10 @@ function _bindEvents(){
   on('btn-cancel-user','click',()=>M.close('m-user'));
   on('btn-save-user',  'click',()=>Sett.saveUser());
 
-  // ── Invite controller modal ──
+  // ── Invite modal ──
   on('btn-cancel-invite','click',()=>M.close('m-invite'));
   on('btn-do-invite',    'click',()=>Sett.inviteController());
+  on('inv-role',         'change',()=>Sett.onInviteRoleChange());
 
   // ── Client modal ──
   on('mc-del',          'click',()=>Sett.delClient());

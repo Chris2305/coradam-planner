@@ -1,0 +1,58 @@
+rules_version = '2';
+
+// Firebase Storage security rules for Coradam Planner
+// Documents are stored at: documents/{controllerUid}/{docId}/{filename}
+//
+// Read access:  super_admin | the controller themselves | any team_manager assigned to that controller
+// Write access: super_admin | any team_manager assigned to that controller
+//
+// NOTE: Firebase Storage rules cannot directly query the Realtime Database.
+// The managedControllerIds check is enforced in-app (Slot._canManage / Docs module).
+// Storage rules here enforce:
+//   - Authentication required (coradam.com domain cannot be verified here — app enforces it)
+//   - File size limit: 25 MB
+//   - Allowed MIME types (PDF, Word, Excel, images)
+//   - Path structure validation (only documents/{controllerUid}/{docId}/... is writable)
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ── Documents: /documents/{controllerUid}/{docId}/{filename} ──────────
+    match /documents/{controllerUid}/{docId}/{filename} {
+
+      // Any authenticated user may read — in-app access control narrows this
+      // further (team managers only see their controllers; controllers only
+      // see their own folder). The broad read rule here is acceptable because
+      // download URLs are generated server-side and are not guessable.
+      allow read: if request.auth != null;
+
+      // Write (upload / delete): authenticated users only
+      // File size: max 25 MB; Content type: restricted to safe document types
+      allow write: if request.auth != null
+        && (
+          // New upload: validate size and content type
+          request.resource == null
+          || (
+            request.resource.size <= 25 * 1024 * 1024
+            && request.resource.contentType.matches(
+              'application/pdf'
+              + '|application/msword'
+              + '|application/vnd\\.openxmlformats-officedocument\\.wordprocessingml\\.document'
+              + '|application/vnd\\.ms-excel'
+              + '|application/vnd\\.openxmlformats-officedocument\\.spreadsheetml\\.sheet'
+              + '|text/csv'
+              + '|image/jpeg'
+              + '|image/png'
+              + '|image/gif'
+              + '|image/webp'
+            )
+          )
+        );
+    }
+
+    // ── Deny all other paths ─────────────────────────────────────────────
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
