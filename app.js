@@ -134,6 +134,13 @@ const Cache = {
 };
 
 // ════════════════════════════════════
+// ROLE HELPERS
+// ════════════════════════════════════
+// isBookable: users who appear on the timeline, in Off Day dropdowns, and in Reports.
+// super_admin is treated as a bookable user so they can carry their own schedule.
+function isBookable(u){ return (u.role==='controller'||u.role==='super_admin')&&u.active; }
+
+// ════════════════════════════════════
 // UI HELPERS
 // ════════════════════════════════════
 const M = {
@@ -379,9 +386,10 @@ const App = {
   goSettings(){
     const u=this.user;
     document.getElementById('set-admin-tabs').style.display=u.role==='super_admin'?'block':'none';
-    document.getElementById('set-profile').style.display=(u.role==='controller'||u.role==='team_manager')?'block':'none';
+    // All roles can update their own country (super_admin uses it for the timeline grouping)
+    document.getElementById('set-profile').style.display='block';
+    document.getElementById('profile-country').value=u.country||'';
     if(u.role==='super_admin') Sett.tab('users');
-    else { document.getElementById('profile-country').value=u.country||''; }
     show('set');
   },
 
@@ -713,7 +721,11 @@ const Slot = {
     this.onRepeatChange(); // resets sub-section visibility and button label
   },
   _fillClients(uid,selCid,selFac){
-    const clients=Cache.clientsFor(uid);
+    // super_admin can book against any client; everyone else sees only their assigned clients
+    const targetUser=Cache.users[uid]||App.user;
+    const clients=targetUser.role==='super_admin'
+      ?Cache.clientsArr().sort((a,b)=>a.name.localeCompare(b.name))
+      :Cache.clientsFor(uid);
     const cs=document.getElementById('ms-client');
     cs.innerHTML='<option value="">Select client…</option>';
     clients.forEach(c=>cs.innerHTML+=`<option value="${c.id}" ${c.id===selCid?'selected':''}>${U.esc(c.name)}</option>`);
@@ -1231,8 +1243,8 @@ const Adm = {
     const y=this.cur.getFullYear(), m=this.cur.getMonth();
     const dCount=U.daysInMonth(y,m), today=U.today();
 
-    // Filtered users (by country)
-    const allUsers=Cache.usersArr().filter(u=>u.role==='controller'&&u.active&&(!this.country||u.country===this.country));
+    // Filtered users (by country) — includes super_admin as a bookable person
+    const allUsers=Cache.usersArr().filter(u=>isBookable(u)&&(!this.country||u.country===this.country));
     allUsers.sort((a,b)=>(a.country||'').localeCompare(b.country||'')||a.name.localeCompare(b.name));
 
     // Entry map by userId+date
@@ -1315,8 +1327,8 @@ const Adm = {
     const startLabel=days[0].toLocaleDateString('en-GB',{day:'numeric',month:'short'});
     const endLabel=days[6].toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
     document.getElementById('adm-lbl').textContent=`${startLabel} – ${endLabel}`;
-    // All active controllers
-    const allUsers=Cache.usersArr().filter(u=>u.role==='controller'&&u.active&&(!this.country||u.country===this.country));
+    // All bookable users (controllers + super_admin), filtered by country if set
+    const allUsers=Cache.usersArr().filter(u=>isBookable(u)&&(!this.country||u.country===this.country));
     allUsers.sort((a,b)=>(a.country||'').localeCompare(b.country||'')||a.name.localeCompare(b.name));
     const WDAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
     // Build entry map
@@ -1817,8 +1829,8 @@ const FB = {
 const OffDay = {
   open(){
     const sel=document.getElementById('od-uid');
-    const users=Cache.usersArr().filter(u=>u.role==='controller'&&u.active).sort((a,b)=>a.name.localeCompare(b.name));
-    sel.innerHTML='<option value="">Select controller…</option>'+users.map(u=>`<option value="${U.esc(u.uid)}">${U.esc(u.name)}</option>`).join('');
+    const users=Cache.usersArr().filter(u=>isBookable(u)).sort((a,b)=>a.name.localeCompare(b.name));
+    sel.innerHTML='<option value="">Select person…</option>'+users.map(u=>`<option value="${U.esc(u.uid)}">${U.esc(u.name)}${u.role==='super_admin'?' ★':''}</option>`).join('');
     // Reset new-entry fields
     document.getElementById('od-type').value='';
     document.getElementById('od-from').value='';
@@ -2087,7 +2099,7 @@ const Rpt = {
     const entries = this._entries(y, moRaw);
     const totalWD = months.reduce((s,m)=>s+this._wDays(y,m),0);
     const controllers = Cache.usersArr()
-      .filter(u=>u.role==='controller'&&u.active)
+      .filter(u=>isBookable(u))
       .sort((a,b)=>a.name.localeCompare(b.name));
 
     // Pre-expand availability rules per user across the period
