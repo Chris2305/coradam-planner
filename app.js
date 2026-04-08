@@ -1095,9 +1095,10 @@ const Adm = {
       if(tEl) tEl.className='ntab'+(v===id?' on':'');
     });
     const isRp=v==='rp';
-    document.getElementById('adm-fbar').style.display  = isRp?'none':'';
-    document.getElementById('adm-stats').style.display = isRp?'none':'';
+    document.getElementById('adm-fbar').style.display    = isRp?'none':'';
+    document.getElementById('adm-stats').style.display   = isRp?'none':'';
     document.getElementById('country-bar').style.display = isRp?'none':'';
+    document.getElementById('adm-nav').style.display     = isRp?'none':'';
     if(isRp){ Rpt.render(); } else { this._render(); }
   },
 
@@ -1908,15 +1909,23 @@ const OffDay = {
 // ════════════════════════════════════
 const DRIVE_SHARE_EMAIL = 'c.nocher@coradam.com';
 const Drive = {
-  // Obtain a valid Drive access token, prompting re-auth if needed
-  async _token(){
-    if(App._driveToken) return App._driveToken;
-    // Re-auth to obtain Google OAuth access token with Drive scope
+  // Re-authenticate with Google to obtain a fresh Drive OAuth token.
+  // Must be called directly from a user gesture (button/label click) so the
+  // browser does not block the popup.
+  async authorize(){
     const provider=new firebase.auth.GoogleAuthProvider();
     provider.addScope('https://www.googleapis.com/auth/drive.file');
     const result=await fauth.currentUser.reauthenticateWithPopup(provider);
-    App._driveToken=result.credential.accessToken;
+    App._driveToken=result.credential?.accessToken||null;
+    if(!App._driveToken) throw new Error('Could not obtain Drive access token — please try again.');
     return App._driveToken;
+  },
+
+  // Return the cached Drive token.  The token is guaranteed to exist here
+  // because the upload label click handler calls authorize() first when needed.
+  async _token(){
+    if(App._driveToken) return App._driveToken;
+    throw new Error('Google Drive not connected. Please click "Upload document" again to reconnect.');
   },
 
   // Drive REST helper — JSON request
@@ -2534,6 +2543,32 @@ function _bindEvents(){
   on('btn-save-slot', 'click',()=>Slot.save());
   // Weekday toggle buttons (Mon–Sun)
   document.querySelectorAll('#ms-wd-btns .wd-btn').forEach(b=>b.addEventListener('click',()=>b.classList.toggle('on')));
+
+  // ── Drive upload — pre-flight token check ──
+  // The label click IS a direct user gesture, so we can open the Google auth
+  // popup here without the browser blocking it.  If the Drive token is already
+  // present we let the label's default behaviour (open file picker) proceed.
+  // If not, we block the default, re-auth, then programmatically open the picker.
+  const uploadLbl=document.getElementById('ms-doc-upload-lbl');
+  if(uploadLbl){
+    uploadLbl.addEventListener('click', e=>{
+      if(App._driveToken) return; // token present — file picker opens normally
+      e.preventDefault();
+      const status=document.getElementById('ms-doc-status');
+      status.textContent='Reconnecting Google Drive…'; status.className='doc-status';
+      uploadLbl.style.pointerEvents='none'; uploadLbl.style.opacity='.55';
+      Drive.authorize().then(()=>{
+        status.textContent='';
+        document.getElementById('ms-doc-input').click(); // open file picker now
+      }).catch(err=>{
+        if(err.code==='auth/popup-closed-by-user'){ status.textContent=''; return; }
+        status.textContent='Drive connection failed: '+U.esc(err.message);
+        status.className='doc-status err';
+      }).finally(()=>{
+        uploadLbl.style.pointerEvents=''; uploadLbl.style.opacity='';
+      });
+    });
+  }
 
   // ── Day picker modal ──
   on('btn-day-book', 'click',()=>{ M.close('m-day'); Slot.add(App._pendingDate); });
