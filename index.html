@@ -193,21 +193,20 @@
       <button class="btn btn-s btn-sm adm-clear-btn" id="btn-adm-clear">✕ Clear</button>
     </div>
 
-    <div id="vw-tl">
-      <div class="cal-nav adm-nav">
-        <div class="cal-nav-side cal-nav-prev">
-          <button class="btn btn-s btn-sm" id="btn-adm-prev">← Prev</button>
-        </div>
-
-        <div class="cal-nav-main">
-          <div class="cal-lbl" id="adm-lbl"></div>
-        </div>
-
-        <div class="cal-nav-side cal-nav-next">
-          <button class="btn btn-s btn-sm" id="btn-adm-next">Next →</button>
-        </div>
+    <!-- Shared prev/next nav — visible for tl, wk, ls views; hidden for rp -->
+    <div class="cal-nav adm-nav" id="adm-nav">
+      <div class="cal-nav-side cal-nav-prev">
+        <button class="btn btn-s btn-sm" id="btn-adm-prev">← Prev</button>
       </div>
+      <div class="cal-nav-main">
+        <div class="cal-lbl" id="adm-lbl"></div>
+      </div>
+      <div class="cal-nav-side cal-nav-next">
+        <button class="btn btn-s btn-sm" id="btn-adm-next">Next →</button>
+      </div>
+    </div>
 
+    <div id="vw-tl">
       <div class="tl-scroll">
         <table class="tl" id="tl-tbl"></table>
       </div>
