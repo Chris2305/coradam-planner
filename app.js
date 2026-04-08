@@ -23,7 +23,7 @@ const log = {
 // ════════════════════════════════════
 const U = {
   uuid(){ return crypto.randomUUID?.() || 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c==='x'?r:(r&3|8)).toString(16)}); },
-  today(){ return new Date().toISOString().slice(0,10); },
+  today(){ const d=new Date(); return `${d.getFullYear()}-${S2(d.getMonth()+1)}-${S2(d.getDate())}`; },
   monthKey(d){ return `${d.getFullYear()}-${S2(d.getMonth()+1)}`; },
   monthLabel(d){ return d.toLocaleString('en-GB',{month:'long',year:'numeric'}); },
   daysInMonth(y,m){ return new Date(y,m+1,0).getDate(); },
@@ -45,25 +45,25 @@ const U = {
     const first = new Date(y, m, 1), last = new Date(y, m+1, 0);
     const dates = [];
     const mode = rule.repeatMode||'none';
-    const base = new Date(rule.startDate);
-    const end = rule.endDate ? new Date(rule.endDate) : null;
-    const until = rule.repeatUntil ? new Date(rule.repeatUntil) : last;
+    const base = parseLocalDate(rule.startDate);
+    const end = rule.endDate ? parseLocalDate(rule.endDate) : null;
+    const until = rule.repeatUntil ? parseLocalDate(rule.repeatUntil) : last;
     if(mode==='none'){
       if(end){
         let d=new Date(Math.max(base,first));
         const stop=new Date(Math.min(end,last));
-        while(d<=stop){ dates.push(d.toISOString().slice(0,10)); d.setDate(d.getDate()+1); }
+        while(d<=stop){ dates.push(localDateStr(d)); d.setDate(d.getDate()+1); }
       } else if(rule.startDate.startsWith(mStr)) dates.push(rule.startDate);
     } else if(mode==='weekly'){
       let d=new Date(base);
       while(d<=until){
-        if(d>=first&&d<=last) dates.push(d.toISOString().slice(0,10));
+        if(d>=first&&d<=last) dates.push(localDateStr(d));
         d.setDate(d.getDate()+7);
       }
     } else if(mode==='monthly'){
       let d=new Date(base);
       while(d<=until){
-        if(d>=first&&d<=last) dates.push(d.toISOString().slice(0,10));
+        if(d>=first&&d<=last) dates.push(localDateStr(d));
         d.setMonth(d.getMonth()+1);
       }
     }
@@ -71,6 +71,10 @@ const U = {
   }
 };
 function S2(n){ return String(n).padStart(2,'0'); }
+// Use local calendar date (not UTC) so cells/dates match wall-clock day in all timezones
+function localDateStr(d){ return `${d.getFullYear()}-${S2(d.getMonth()+1)}-${S2(d.getDate())}`; }
+// Parse a YYYY-MM-DD string as local midnight (avoids UTC-shift on new Date('YYYY-MM-DD'))
+function parseLocalDate(s){ const[y,m,dd]=s.split('-').map(Number); return new Date(y,m-1,dd); }
 function el(tag,cls){ const e=document.createElement(tag); if(cls)e.className=cls; return e; }
 
 // ════════════════════════════════════
@@ -535,7 +539,7 @@ const Cal = {
     container.innerHTML='';
     const grid=document.createElement('div'); grid.className='week-grid';
     days.forEach((d,i)=>{
-      const ds=d.toISOString().slice(0,10);
+      const ds=localDateStr(d);
       const isT=ds===today;
       const de=eMap[ds]||[];
       const avRules=aMap[ds]||[];
@@ -1273,7 +1277,7 @@ const Adm = {
     const eMap={};
     Cache.entriesArr().forEach(e=>{ const k=e.userId+'|'+e.date; (eMap[k]=eMap[k]||[]).push(e); });
     // Build availability map for the 7 displayed days
-    const weekDates=days.map(d=>d.toISOString().slice(0,10));
+    const weekDates=days.map(d=>localDateStr(d));
     const aMap={};
     Cache.availArr().forEach(rule=>{
       const months=[...new Set(weekDates.map(d=>d.slice(0,7)))];
@@ -1281,14 +1285,14 @@ const Adm = {
     });
     if(!allUsers.length){ document.getElementById('wk-content').innerHTML='<div class="tbl-empty">No controllers for this filter.</div>'; return; }
     let html='<div class="tl-scroll-wrap"><table class="tl tl-min-700"><thead><tr><th class="wk-hdr-cell">Controller</th>';
-    days.forEach((d,i)=>{ const ds=d.toISOString().slice(0,10); const isT=ds===today,isW=d.getDay()===0||d.getDay()===6; html+=`<th class="${isT?'tc-td':isW?'wknd-col':''}">${WDAYS[i]}<br>${d.getDate()}</th>`; });
+    days.forEach((d,i)=>{ const ds=localDateStr(d); const isT=ds===today,isW=d.getDay()===0||d.getDay()===6; html+=`<th class="${isT?'tc-td':isW?'wknd-col':''}">${WDAYS[i]}<br>${d.getDate()}</th>`; });
     html+='</tr></thead><tbody>';
     let lastCountry='';
     allUsers.forEach(u=>{
       if(u.country!==lastCountry&&u.country){ lastCountry=u.country; html+=`<tr class="tl-grp-row"><td colspan="8" class="tl-grp-cell">${U.flag(u.country)} ${U.esc(u.country)}</td></tr>`; }
       html+=`<tr><td class="tl-name-cell"><div class="tl-un">${U.esc(u.name)}</div></td>`;
       days.forEach(d=>{
-        const ds=d.toISOString().slice(0,10);
+        const ds=localDateStr(d);
         const isT=ds===today, isW=d.getDay()===0||d.getDay()===6;
         const de=eMap[u.uid+'|'+ds]||[];
         const av=aMap[u.uid+'|'+ds]||[];

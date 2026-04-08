@@ -56,6 +56,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .av-btn{flex:1;padding:.5rem;border:2px solid var(--bdr);border-radius:var(--r);background:#fff;cursor:pointer;font-size:.78rem;font-weight:700;text-align:center;transition:all .14s;color:var(--txs)}
 .av-btn.on-yes{border-color:#16a34a;background:#f0fdf4;color:#166534}
 .av-btn.on-no{border-color:#dc2626;background:#fef2f2;color:#991b1b}
+.av-btn.on{border-color:var(--p);background:var(--p);color:#fff}
 
 /* Weekday picker (booking recurrence) */
 .wd-btns{display:flex;gap:.28rem}
