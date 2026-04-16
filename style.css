@@ -989,4 +989,117 @@ code{background:#f1f5f9;border:1px solid var(--bdr);border-radius:4px;padding:1p
 .mgr-doc-status.uploading{color:var(--txs);font-style:italic}
 .mgr-doc-status.ok{color:#059669}
 .mgr-doc-status.err{color:#dc2626}
+
+/* ═══════════════════════════════════════════════
+   ANALYTICS PANEL  (FE-01 → FE-20)
+═══════════════════════════════════════════════ */
+
+/* FE-02 — Filter bar */
+.an-fbar{display:flex;gap:.6rem;flex-wrap:wrap;align-items:flex-end;background:#fff;border:1px solid var(--bdr);border-radius:var(--r);padding:.75rem;margin-bottom:.9rem;box-shadow:var(--sh)}
+
+/* FE-01 — Sub-tab bar */
+.an-tabs{display:flex;gap:0;margin-bottom:1rem;border-bottom:2px solid var(--bdr)}
+.an-tab{padding:.5rem 1.1rem;border:none;background:transparent;font-size:.8rem;font-weight:700;cursor:pointer;color:var(--txs);border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .14s;border-radius:0}
+.an-tab:hover{color:var(--p)}
+.an-tab.on{color:var(--p);border-bottom-color:var(--p)}
+
+/* FE-03 — KPI cards (overview metrics row) */
+.an-kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:.65rem;margin-bottom:1rem}
+.kpi-card{background:#fff;border:1px solid var(--bdr);border-radius:var(--r);padding:1rem;box-shadow:var(--sh);position:relative;overflow:hidden}
+.kpi-title{font-size:.65rem;font-weight:800;color:var(--txs);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.3rem;display:flex;align-items:center;gap:.3rem}
+.kpi-value{font-size:1.65rem;font-weight:800;color:var(--tx);line-height:1.1;margin-bottom:.25rem;word-break:break-word}
+.kpi-delta{font-size:.73rem;font-weight:700;display:flex;align-items:center;gap:.2rem}
+.kpi-up{color:#16a34a}.kpi-dn{color:var(--danger)}.kpi-neutral{color:var(--txs)}
+
+/* Loading skeleton (FE-16) */
+.kpi-skel .kpi-value,.kpi-skel .kpi-delta{background:#e2e8f0;border-radius:4px;color:transparent;animation:skel-pulse 1.4s ease-in-out infinite}
+@keyframes skel-pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* Charts grid */
+.an-charts-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:.7rem;margin-bottom:1rem}
+.an-chart-card{background:#fff;border:1px solid var(--bdr);border-radius:var(--r);padding:1rem;box-shadow:var(--sh)}
+.an-chart-wide{grid-column:1/-1}
+.an-card-t{font-size:.78rem;font-weight:800;color:var(--tx);margin-bottom:.7rem;display:flex;align-items:center;gap:.35rem}
+.an-chart-wrap{position:relative;height:220px}
+.an-chart-wrap canvas{max-width:100%}
+
+/* Tables layout */
+.an-tables-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:.7rem;margin-bottom:1rem}
+.an-tbl-card{background:#fff;border:1px solid var(--bdr);border-radius:var(--r);box-shadow:var(--sh);overflow:hidden;margin-bottom:1rem}
+.an-card-head{padding:.65rem 1rem;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between}
+.an-card-head .an-card-t{margin-bottom:0}
+
+/* Analytics table (FE-07, FE-09, FE-17) */
+.an-tbl{width:100%;border-collapse:collapse;font-size:.78rem}
+.an-tbl th{background:#f8fafc;padding:.48rem .75rem;text-align:left;font-size:.63rem;font-weight:800;color:var(--txs);text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--bdr);white-space:nowrap;cursor:pointer;user-select:none}
+.an-tbl th:hover{color:var(--p)}
+.an-tbl th.sort-asc::after{content:' ▲';color:var(--p)}
+.an-tbl th.sort-desc::after{content:' ▼';color:var(--p)}
+.an-tbl td{padding:.42rem .75rem;border-bottom:1px solid var(--bdr);vertical-align:middle;white-space:nowrap}
+.an-tbl tr:last-child td{border-bottom:none}
+.an-tbl tr:hover td{background:#f8fafc}
+.an-tbl-scroll{max-height:420px;overflow-y:auto}
+.an-tbl-sticky thead th{position:sticky;top:0;z-index:1}
+
+/* FE-09 — Utilization status badges */
+.an-status{display:inline-flex;align-items:center;padding:.15rem .5rem;border-radius:999px;font-size:.66rem;font-weight:700;white-space:nowrap}
+.an-status-good{background:#dcfce7;color:#166534}
+.an-status-warn{background:#fef9c3;color:#854d0e}
+.an-status-crit{background:#fee2e2;color:#991b1b}
+.an-status-na{background:#f1f5f9;color:var(--txs)}
+
+/* Trend indicators */
+.an-trend-up{color:#16a34a;font-weight:700}
+.an-trend-dn{color:var(--danger);font-weight:700}
+.an-trend-flat{color:var(--txs);font-weight:700}
+
+/* Fill rate mini-bar (FE-09) */
+.an-fr-bar-wrap{display:flex;align-items:center;gap:.45rem;min-width:100px}
+.an-fr-bar{flex:1;height:7px;border-radius:4px;background:#f1f5f9;overflow:hidden}
+.an-fr-fill{height:100%;border-radius:4px;background:var(--p);transition:width .3s}
+.an-fr-pct{font-size:.72rem;font-weight:700;min-width:38px;color:var(--tx)}
+
+/* Pagination (FE-07, FE-09) */
+.an-pagination{display:flex;align-items:center;gap:.4rem;padding:.5rem .75rem;border-top:1px solid var(--bdr);font-size:.75rem;color:var(--txs)}
+.an-page-btn{padding:.2rem .6rem;border:1.5px solid var(--bdr);border-radius:var(--r);background:#fff;font-size:.72rem;font-weight:600;cursor:pointer;transition:all .13s}
+.an-page-btn:hover{border-color:var(--p);color:var(--p)}
+.an-page-btn:disabled{opacity:.38;cursor:default}
+.an-page-info{flex:1;text-align:center}
+
+/* FE-16 — Empty / error states */
+.an-empty{padding:2.5rem 1rem;text-align:center;color:var(--txs)}
+.an-empty-ic{font-size:2rem;margin-bottom:.4rem}
+.an-empty-t{font-size:.88rem;font-weight:700}
+.an-empty-s{font-size:.76rem;margin-top:.2rem}
+.an-error-banner{background:#fef2f2;border:1px solid #fca5a5;border-radius:var(--r);padding:.7rem 1rem;color:#991b1b;font-size:.82rem;display:flex;align-items:center;gap:.5rem;margin-bottom:.7rem}
+
+/* FE-20 — Tooltip trigger icon */
+.an-tip-icon{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:var(--bdr);color:var(--txs);font-size:.6rem;font-weight:800;cursor:help;flex-shrink:0;line-height:1}
+
+/* FE-15 — Alerts section */
+.an-alerts-section{background:#fff;border:1px solid var(--bdr);border-radius:var(--r);padding:1rem;box-shadow:var(--sh);margin-bottom:1rem}
+.an-alerts-title{margin-bottom:.7rem}
+.an-alert-item{display:flex;align-items:flex-start;gap:.6rem;padding:.5rem .6rem;border-radius:6px;margin-bottom:.35rem;font-size:.8rem;cursor:pointer;transition:filter .13s}
+.an-alert-item:hover{filter:brightness(.97)}
+.an-alert-crit{background:#fef2f2;color:#991b1b}
+.an-alert-warn{background:#fffbeb;color:#92400e}
+.an-alert-info{background:#eff6ff;color:#1d4ed8}
+.an-alert-ico{font-size:1rem;flex-shrink:0;margin-top:.05rem}
+.an-alert-txt{flex:1;line-height:1.45}
+.an-alert-lbl{font-weight:800}
+.an-alert-sub{font-size:.73rem;opacity:.85;margin-top:.1rem}
+.an-no-alerts{color:var(--txs);font-size:.82rem;padding:.3rem 0}
+
+/* Responsive overrides (FE-19) */
+@media(max-width:768px){
+  .an-charts-grid{grid-template-columns:1fr}
+  .an-chart-wide{grid-column:1}
+  .an-tables-row{grid-template-columns:1fr}
+  .an-kpi-row{grid-template-columns:repeat(2,1fr)}
+  .an-chart-wrap{height:180px}
+}
+@media(max-width:480px){
+  .an-kpi-row{grid-template-columns:1fr 1fr}
+  .kpi-value{font-size:1.3rem}
+}
 .set-card-mt{margin-top:1rem}

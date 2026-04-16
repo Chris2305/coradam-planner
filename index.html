@@ -7,6 +7,7 @@
   <link rel="icon" type="image/x-icon" href="favicon.ico">
   <link rel="apple-touch-icon" href="favicon-192.png">
 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -14,7 +15,7 @@
 
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
-    script-src 'self' https://www.gstatic.com https://apis.google.com https://*.firebasedatabase.app;
+    script-src 'self' https://www.gstatic.com https://apis.google.com https://*.firebasedatabase.app https://cdn.jsdelivr.net;
     style-src 'self';
     img-src 'self' data: https://lh3.googleusercontent.com https://*.googleusercontent.com https:;
     connect-src 'self' https://www.gstatic.com https://*.googleapis.com https://*.firebaseapp.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://*.firebaseio.com wss://*.firebaseio.com https://securetoken.googleapis.com https://identitytoolkit.googleapis.com https://www.googleapis.com https://firebasestorage.googleapis.com;
@@ -155,6 +156,7 @@
           <div class="ntab" id="nt-wk">Week</div>
           <div class="ntab" id="nt-ls">List</div>
           <div class="ntab" id="nt-rp">Reports</div>
+          <div class="ntab" id="nt-an">📊 Analytics</div>
         </div>
       </div>
 
@@ -281,6 +283,205 @@
         </div>
       </div>
     </div>
+
+    <!-- ══════════════════════════════
+         ANALYTICS VIEW (FE-01 → FE-20)
+    ══════════════════════════════ -->
+    <div id="vw-an" style="display:none">
+
+      <!-- FE-02 — Global analytics filter bar -->
+      <div class="an-fbar" id="an-fbar">
+        <div class="fg-f">
+          <span class="flbl">From</span>
+          <input type="date" id="an-from" class="fsel">
+        </div>
+        <div class="fg-f">
+          <span class="flbl">To</span>
+          <input type="date" id="an-to" class="fsel">
+        </div>
+        <div class="fg-f">
+          <span class="flbl">Country</span>
+          <select id="an-country" class="fsel"><option value="">All countries</option></select>
+        </div>
+        <div class="fg-f">
+          <span class="flbl">Client</span>
+          <select id="an-client" class="fsel"><option value="">All clients</option></select>
+        </div>
+        <div class="fg-f">
+          <span class="flbl">Factory</span>
+          <select id="an-factory" class="fsel"><option value="">All factories</option></select>
+        </div>
+        <div class="fg-f">
+          <span class="flbl">Controller</span>
+          <select id="an-ctrl" class="fsel"><option value="">All controllers</option></select>
+        </div>
+        <button class="btn btn-s btn-sm" id="an-clear">✕ Clear</button>
+        <button class="btn btn-p btn-sm" id="an-apply">↺ Apply</button>
+      </div>
+
+      <!-- FE-01 — Analytics sub-tab bar -->
+      <div class="an-tabs" id="an-tabs">
+        <button class="an-tab on" data-anltab="overview">Overview</button>
+        <button class="an-tab" data-anltab="visibility">Visibility</button>
+        <button class="an-tab" data-anltab="capacity">Capacity</button>
+        <button class="an-tab" data-anltab="clients">Clients</button>
+        <button class="an-tab" data-anltab="forecast">Forecast</button>
+      </div>
+
+      <!-- FE-04 — OVERVIEW TAB -->
+      <div class="an-panel" id="an-panel-overview">
+        <div class="an-kpi-row" id="an-ov-kpis"></div>
+        <div class="an-charts-grid">
+          <div class="an-chart-card">
+            <div class="an-card-t">Visibility Trend
+              <span class="an-tip-icon" data-tip="Booked half-days per month — shows how your booking pipeline evolves over time.">?</span>
+            </div>
+            <div class="an-chart-wrap"><canvas id="an-ov-vis-chart"></canvas></div>
+          </div>
+          <div class="an-chart-card">
+            <!-- FE-05 — Lead time distribution -->
+            <div class="an-card-t">Lead Time Distribution
+              <span class="an-tip-icon" data-tip="How far in advance bookings are created (service date minus booking creation date).">?</span>
+            </div>
+            <div class="an-chart-wrap"><canvas id="an-ov-lt-chart"></canvas></div>
+          </div>
+          <div class="an-chart-card">
+            <!-- FE-10 — Country fill rate -->
+            <div class="an-card-t">Fill Rate by Country
+              <span class="an-tip-icon" data-tip="Fill rate = booked half-days ÷ available half-days. Stacked bar: blue = booked, green = available-unbooked.">?</span>
+            </div>
+            <div class="an-chart-wrap"><canvas id="an-ov-fr-chart"></canvas></div>
+          </div>
+        </div>
+        <div class="an-tables-row">
+          <div class="an-tbl-card">
+            <div class="an-card-head">
+              <span class="an-card-t">Top Client Visibility</span>
+              <button class="btn btn-s btn-sm" id="an-ov-cli-csv">⬇ CSV</button>
+            </div>
+            <div class="ov-x-auto" id="an-ov-cli-body"></div>
+          </div>
+          <div class="an-tbl-card">
+            <div class="an-card-head">
+              <span class="an-card-t">Controller Fill Summary</span>
+              <button class="btn btn-s btn-sm" id="an-ov-ctrl-csv">⬇ CSV</button>
+            </div>
+            <div class="ov-x-auto" id="an-ov-ctrl-body"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- FE-11 — VISIBILITY TAB -->
+      <div class="an-panel" id="an-panel-visibility" style="display:none">
+        <div class="an-kpi-row" id="an-vis-kpis"></div>
+        <div class="an-charts-grid">
+          <div class="an-chart-card">
+            <div class="an-card-t">Lead Time Distribution</div>
+            <div class="an-chart-wrap"><canvas id="an-vis-lt-chart"></canvas></div>
+          </div>
+          <div class="an-chart-card">
+            <!-- FE-06 — Visibility trend -->
+            <div class="an-card-t">Visibility Trend (monthly)</div>
+            <div class="an-chart-wrap"><canvas id="an-vis-trend-chart"></canvas></div>
+          </div>
+          <div class="an-chart-card">
+            <!-- FE-12 — Future booked capacity -->
+            <div class="an-card-t">Future Booked Capacity
+              <span class="an-tip-icon" data-tip="Total booked half-days per future window.">?</span>
+            </div>
+            <div class="an-chart-wrap"><canvas id="an-vis-cap-chart"></canvas></div>
+          </div>
+        </div>
+        <div class="an-tbl-card">
+          <div class="an-card-head">
+            <!-- FE-07 — Client visibility table -->
+            <span class="an-card-t">Client Visibility Ranking</span>
+            <button class="btn btn-s btn-sm" id="an-vis-cli-csv">⬇ CSV</button>
+          </div>
+          <div class="ov-x-auto" id="an-vis-cli-body"></div>
+        </div>
+      </div>
+
+      <!-- FE-08 — CAPACITY TAB -->
+      <div class="an-panel" id="an-panel-capacity" style="display:none">
+        <div class="an-kpi-row" id="an-cap-kpis"></div>
+        <div class="an-charts-grid">
+          <div class="an-chart-card">
+            <div class="an-card-t">Fill Rate by Country
+              <span class="an-tip-icon" data-tip="Fill rate = booked ÷ available. Only months/controllers where availability has been set are counted.">?</span>
+            </div>
+            <div class="an-chart-wrap"><canvas id="an-cap-fr-chart"></canvas></div>
+          </div>
+          <div class="an-chart-card">
+            <div class="an-card-t">Fill Rate Trend (last 6 months)</div>
+            <div class="an-chart-wrap"><canvas id="an-cap-trend-chart"></canvas></div>
+          </div>
+        </div>
+        <div class="an-tbl-card">
+          <div class="an-card-head">
+            <!-- FE-09 — Controller fill rate table -->
+            <span class="an-card-t">Controller Fill Rates</span>
+            <button class="btn btn-s btn-sm" id="an-cap-ctrl-csv">⬇ CSV</button>
+          </div>
+          <div class="ov-x-auto" id="an-cap-ctrl-body"></div>
+        </div>
+      </div>
+
+      <!-- FE-13 — CLIENTS TAB -->
+      <div class="an-panel" id="an-panel-clients" style="display:none">
+        <div class="an-kpi-row" id="an-cli-kpis"></div>
+        <div class="an-charts-grid">
+          <div class="an-chart-card">
+            <div class="an-card-t">Client Segments
+              <span class="an-tip-icon" data-tip="Strategic: avg lead time ≥ 60d. Standard: 15–60d. Reactive: &lt; 15d.">?</span>
+            </div>
+            <div class="an-chart-wrap"><canvas id="an-cli-seg-chart"></canvas></div>
+          </div>
+          <div class="an-chart-card">
+            <div class="an-card-t">Avg Lead Time by Client (top 10)</div>
+            <div class="an-chart-wrap"><canvas id="an-cli-lt-chart"></canvas></div>
+          </div>
+          <div class="an-chart-card">
+            <div class="an-card-t">Future Booked Capacity by Client (top 10, next 90d)</div>
+            <div class="an-chart-wrap"><canvas id="an-cli-cap-chart"></canvas></div>
+          </div>
+        </div>
+        <div class="an-tbl-card">
+          <div class="an-card-head">
+            <span class="an-card-t">Client Visibility Table</span>
+            <button class="btn btn-s btn-sm" id="an-cli-tbl-csv">⬇ CSV</button>
+          </div>
+          <div class="ov-x-auto" id="an-cli-tbl-body"></div>
+        </div>
+      </div>
+
+      <!-- FE-14 — FORECAST TAB -->
+      <div class="an-panel" id="an-panel-forecast" style="display:none">
+        <div class="an-kpi-row" id="an-fc-kpis"></div>
+        <div class="an-charts-grid">
+          <div class="an-chart-card an-chart-wide">
+            <div class="an-card-t">Future Available vs Booked by Country
+              <span class="an-tip-icon" data-tip="Blue = booked next 30d. Indigo = booked next 90d. Green = remaining available in next 90d. Based on current known bookings and availability rules.">?</span>
+            </div>
+            <div class="an-chart-wrap"><canvas id="an-fc-country-chart"></canvas></div>
+          </div>
+        </div>
+        <!-- FE-15 — Alert list -->
+        <div class="an-alerts-section">
+          <div class="an-card-t an-alerts-title">📢 Alerts</div>
+          <div id="an-alerts-body"></div>
+        </div>
+        <div class="an-tbl-card">
+          <div class="an-card-head">
+            <span class="an-card-t">Remaining Sellable Capacity</span>
+            <button class="btn btn-s btn-sm" id="an-fc-cap-csv">⬇ CSV</button>
+          </div>
+          <div class="ov-x-auto" id="an-fc-cap-body"></div>
+        </div>
+      </div>
+
+    </div><!-- /vw-an -->
+
   </div>
 </div>
 
