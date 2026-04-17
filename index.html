@@ -18,7 +18,7 @@
     script-src 'self' https://www.gstatic.com https://apis.google.com https://*.firebasedatabase.app https://cdn.jsdelivr.net;
     style-src 'self';
     img-src 'self' data: https://lh3.googleusercontent.com https://*.googleusercontent.com https:;
-    connect-src 'self' https://www.gstatic.com https://*.googleapis.com https://*.firebaseapp.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://*.firebaseio.com wss://*.firebaseio.com https://securetoken.googleapis.com https://identitytoolkit.googleapis.com https://www.googleapis.com https://firebasestorage.googleapis.com;
+    connect-src 'self' https://www.gstatic.com https://*.googleapis.com https://*.firebaseapp.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://*.firebaseio.com wss://*.firebaseio.com https://securetoken.googleapis.com https://identitytoolkit.googleapis.com https://www.googleapis.com https://firebasestorage.googleapis.com https://date.nager.at;
     frame-src 'self' https://accounts.google.com https://*.firebaseapp.com https://*.google.com;
     font-src 'self';
     object-src 'none';
@@ -677,22 +677,19 @@
       <input type="hidden" id="ms-type">
     </div>
     <div class="fg"><label class="lbl">Client</label><select id="ms-client" class="sel"><option value="">Select client…</option></select></div>
-    <div class="fg"><label class="lbl">Factory</label><select id="ms-factory" class="sel"><option value="">Select factory…</option></select></div>
-    <div class="row2">
-      <div class="fg"><label class="lbl">Expected Qty <span class="lbl-opt">(opt.)</span></label><input type="number" id="ms-eqty" class="inp inp-num" placeholder="—" min="0" step="1"></div>
-      <div class="fg"><label class="lbl">Final Qty <span class="lbl-opt">(opt.)</span></label><input type="number" id="ms-fqty" class="inp inp-num" placeholder="—" min="0" step="1"></div>
+
+    <!-- Manufacturers list (Feature 3+4: per-manufacturer factory + qty + docs) -->
+    <div class="fg">
+      <label class="lbl">Manufacturers</label>
+      <div id="ms-mfrs-list" class="mfrs-list"></div>
+      <button type="button" class="btn btn-s btn-sm" id="btn-add-mfr">+ Add another manufacturer</button>
     </div>
+
     <div class="fg"><label class="lbl">Notes <span class="lbl-opt">(opt.)</span></label><textarea id="ms-notes" class="inp ta" placeholder="Additional notes…"></textarea></div>
-    <!-- Documents section — visible in edit mode only -->
-    <div class="fg" id="ms-docs-wrap" style="display:none">
-      <label class="lbl">Documents</label>
-      <div id="ms-docs-list" class="docs-list"></div>
-      <label class="btn btn-s btn-sm docs-upload-btn" id="ms-doc-upload-lbl">
-        ⬆ Upload document
-        <input type="file" id="ms-doc-input" accept=".pdf,.xlsx,.xls,.csv,.jpg,.jpeg,.png,.gif,.webp,.mp4,.mov,.avi" style="display:none">
-      </label>
-      <div id="ms-doc-status"></div>
-    </div>
+    <!-- Holiday warning (Feature 6) -->
+    <div id="ms-holiday-warn" class="holiday-warn" style="display:none"></div>
+    <!-- Hidden file input used by per-manufacturer upload buttons -->
+    <input type="file" id="ms-doc-input" accept=".pdf,.xlsx,.xls,.csv,.jpg,.jpeg,.png,.gif,.webp,.mp4,.mov,.avi" style="display:none">
     <div id="ms-err" class="err-msg"></div>
     <div class="mfoot">
       <button class="btn btn-d btn-sm ml d-none" id="ms-del">Delete</button>

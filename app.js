@@ -78,6 +78,141 @@ function parseLocalDate(s){ const[y,m,dd]=s.split('-').map(Number); return new D
 function el(tag,cls){ const e=document.createElement(tag); if(cls)e.className=cls; return e; }
 
 // ════════════════════════════════════
+// HOLIDAYS — Official national public holidays (Nager.Date public API)
+// Drives: (a) orange highlight on calendar based on controller's country,
+//         (b) skipping of recurring bookings on national holidays.
+// ════════════════════════════════════
+const COUNTRY_CODES = {Italy:'IT',Thailand:'TH',France:'FR',Portugal:'PT',Spain:'ES',India:'IN'};
+const Hol = {
+  // In-memory cache: { 'IT': { 2026: [{date,name}], 2027: [...] } }
+  cache: {},
+  _inflight: {},       // prevents duplicate concurrent fetches
+  _lsKey(code, year){ return `hol:${code}:${year}`; },
+
+  // Load cached data from localStorage into memory at startup
+  _loadLS(){
+    try{
+      for(let i=0;i<localStorage.length;i++){
+        const k=localStorage.key(i);
+        if(!k||!k.startsWith('hol:')) continue;
+        const [,code,year]=k.split(':');
+        const raw=localStorage.getItem(k);
+        if(!raw) continue;
+        const data=JSON.parse(raw);
+        // Refresh if stored data is older than 30 days (in case API corrects a holiday)
+        if(!data._fetched||(Date.now()-data._fetched>30*86400000)){ localStorage.removeItem(k); continue; }
+        (this.cache[code]=this.cache[code]||{})[year]=data.items||[];
+      }
+    } catch(e){ log.warn('Hol LS load failed',e); }
+  },
+
+  _code(country){ return COUNTRY_CODES[country]||null; },
+
+  // Returns array of {date:'YYYY-MM-DD', name, localName} or [] — never throws.
+  async forYear(country, year){
+    const code=this._code(country); if(!code) return [];
+    (this.cache[code]=this.cache[code]||{});
+    if(this.cache[code][year]) return this.cache[code][year];
+    const key=`${code}:${year}`;
+    if(this._inflight[key]) return this._inflight[key];
+    this._inflight[key]=(async()=>{
+      try{
+        const res=await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/${code}`);
+        if(!res.ok) throw new Error('HTTP '+res.status);
+        const data=await res.json();
+        const items=(data||[]).map(h=>({date:h.date,name:h.name||h.localName||'Holiday',localName:h.localName||h.name||''}));
+        this.cache[code][year]=items;
+        try{ localStorage.setItem(this._lsKey(code,year),JSON.stringify({items,_fetched:Date.now()})); }catch{}
+        return items;
+      } catch(e){
+        log.warn(`Holiday fetch failed ${country} ${year}:`,e.message);
+        this.cache[code][year]=[]; // cache empty so we don't retry immediately
+        return [];
+      } finally{
+        delete this._inflight[key];
+      }
+    })();
+    return this._inflight[key];
+  },
+
+  // Synchronous lookup — returns {date,name} or null. Requires prior prefetch.
+  get(country, dateStr){
+    const code=this._code(country); if(!code||!dateStr) return null;
+    const year=dateStr.slice(0,4);
+    const list=this.cache[code]?.[year]; if(!list) return null;
+    return list.find(h=>h.date===dateStr)||null;
+  },
+  is(country, dateStr){ return !!this.get(country,dateStr); },
+
+  // Ensures all years touched by a date range are loaded. Safe to call repeatedly.
+  async prefetchRange(country, startDate, endDate){
+    if(!country) return;
+    const y1=parseInt((startDate||'').slice(0,4))||new Date().getFullYear();
+    const y2=parseInt((endDate||startDate||'').slice(0,4))||y1;
+    const years=[]; for(let y=y1;y<=y2;y++) years.push(y);
+    await Promise.all(years.map(y=>this.forYear(country,y)));
+  },
+
+  // Prefetch for a calendar view (current year and neighbours)
+  async prefetchForView(country, centerDate){
+    if(!country) return;
+    const y=centerDate.getFullYear();
+    await Promise.all([y-1,y,y+1].map(yy=>this.forYear(country,yy)));
+  }
+};
+
+// ════════════════════════════════════
+// MANUFACTURER NORMALISATION
+// Feature 3+4: bookings now carry a manufacturers[] array. Legacy entries
+// (factory / expectedQty / finalQty / documents on the top-level) are
+// transparently upgraded in-memory on read via normalizeEntry().
+// ════════════════════════════════════
+function normalizeManufacturers(entry){
+  if(!entry) return [];
+  if(Array.isArray(entry.manufacturers)&&entry.manufacturers.length){
+    return entry.manufacturers.map(m=>({
+      factory: m.factory||'',
+      expectedQty: m.expectedQty!=null?m.expectedQty:null,
+      finalQty: m.finalQty!=null?m.finalQty:null,
+      documents: Array.isArray(m.documents)?m.documents:[]
+    }));
+  }
+  // Legacy: synthesize a single manufacturer from top-level fields
+  return [{
+    factory: entry.factory||'',
+    expectedQty: entry.expectedQty!=null?entry.expectedQty:null,
+    finalQty: entry.finalQty!=null?entry.finalQty:null,
+    documents: Array.isArray(entry.documents)?entry.documents:[]
+  }];
+}
+
+// Convenience readers used by renderers — always operate on normalized form.
+function entryHasDocs(entry){
+  return normalizeManufacturers(entry).some(m=>Array.isArray(m.documents)&&m.documents.length>0);
+}
+function entryDocCount(entry){
+  return normalizeManufacturers(entry).reduce((s,m)=>s+(Array.isArray(m.documents)?m.documents.length:0),0);
+}
+function entryFactoryLabel(entry){
+  const mfrs=normalizeManufacturers(entry).filter(m=>m.factory);
+  if(!mfrs.length) return '';
+  if(mfrs.length===1) return mfrs[0].factory;
+  return `${mfrs[0].factory} +${mfrs.length-1}`;
+}
+function entryTotalExpected(entry){
+  const mfrs=normalizeManufacturers(entry);
+  const filled=mfrs.filter(m=>m.expectedQty!=null);
+  if(!filled.length) return null;
+  return filled.reduce((s,m)=>s+m.expectedQty,0);
+}
+function entryTotalFinal(entry){
+  const mfrs=normalizeManufacturers(entry);
+  const filled=mfrs.filter(m=>m.finalQty!=null);
+  if(!filled.length) return null;
+  return filled.reduce((s,m)=>s+m.finalQty,0);
+}
+
+// ════════════════════════════════════
 // LOCAL STORAGE
 // ════════════════════════════════════
 const LS = {
@@ -118,6 +253,8 @@ const Cache = {
   async loadAll(){
     const [u,c,e,a]=await Promise.all([fbGet('users'),fbGet('clients'),fbGet('entries'),fbGet('availability')]);
     this.users=u||{}; this.clients=c||{}; this.entries=e||{}; this.availability=a||{};
+    // Prime holiday cache from localStorage (no network)
+    Hol._loadLS();
   },
   usersArr(){ return Object.values(this.users); },
   clientsArr(){ return Object.values(this.clients); },
@@ -440,9 +577,34 @@ const Cal = {
     else this._renderList();
   },
 
+  // Kick off holiday prefetch for the current country+year(s) — repaint when ready.
+  _prefetchHolidays(){
+    const country=App.user?.country;
+    if(!country) return;
+    const center=new Date(this.cur);
+    Hol.prefetchForView(country,center).then(()=>{ this.render(); });
+  },
+
+  // Build one chip HTML fragment for a booking (shared by month + week views).
+  // Shows client name (or slot) with a 📎 paperclip when documents are attached.
+  _chipHtml(e){
+    const cc=U.chipCls(e.slot);
+    const factoryLbl=entryFactoryLabel(e);
+    const tooltip=e.slot+' – '+(e.clientName||'')+(factoryLbl?' @ '+factoryLbl:'');
+    const clip=entryHasDocs(e)?'<span class="has-docs-icon" title="Has attached documents">📎</span>':'';
+    return `<div class="chip ${cc}" data-eid="${U.esc(e.id)}" title="${U.esc(tooltip)}">${U.esc(e.clientName||e.slot)}${clip}</div>`;
+  },
+
   _renderMonth(){
     const y=this.cur.getFullYear(), m=this.cur.getMonth(), today=U.today(), uid=App.user.uid;
+    const country=App.user?.country||'';
     document.getElementById('cal-lbl').textContent=U.monthLabel(this.cur);
+
+    // Ensure holiday cache is warm for this view (fires network on cache miss)
+    if(country){
+      const needed=[y-1,y,y+1].some(yr=>!Hol.cache[Hol._code(country)]?.[yr]);
+      if(needed) this._prefetchHolidays();
+    }
 
     const entries=Cache.entriesArr().filter(e=>e.userId===uid);
     const eMap={}; entries.forEach(e=>{ (eMap[e.date]=eMap[e.date]||[]).push(e); });
@@ -467,22 +629,29 @@ const Cal = {
       const avRules=aMap[ds]||[];
       const hasAvail=avRules.some(r=>r.type==='available');
       const hasUnavail=avRules.some(r=>r.type==='unavailable');
+      const hol=country?Hol.get(country,ds):null;
 
       let cls='cal-day';
       if(isT) cls+=' is-today';
+      else if(hol) cls+=' is-holiday';
       else if(hasUnavail) cls+=' is-unavail';
       else if(hasAvail) cls+=' is-avail';
 
-      let chips='';
-      de.forEach(e=>{
-        const cc=U.chipCls(e.slot);
-        chips+=`<div class="chip ${cc}" data-eid="${U.esc(e.id)}" title="${U.esc(e.slot+' – '+(e.clientName||'')+(e.factory?' @ '+e.factory:''))}">${U.esc(e.clientName||e.slot)}</div>`;
-      });
-      if(hasAvail&&!hasUnavail) chips+=`<div class="av-tag av-tag-yes">✓ Available</div>`;
-      if(hasUnavail) chips+=`<div class="av-tag av-tag-no">✗ Unavailable</div>`;
+      // Split bookings into AM and PM lanes (Full Day shows in both to make the day unambiguous)
+      const amBookings=de.filter(e=>e.slot==='Half Day AM'||e.slot==='Full Day');
+      const pmBookings=de.filter(e=>e.slot==='Half Day PM'||e.slot==='Full Day');
+      const amChips=amBookings.map(e=>this._chipHtml(e)).join('');
+      const pmChips=pmBookings.map(e=>this._chipHtml(e)).join('');
+
+      let body=`<div class="dslot-half dslot-am"><span class="dslot-half-lbl">AM</span>${amChips}</div>`+
+               `<div class="dslot-half dslot-pm"><span class="dslot-half-lbl">PM</span>${pmChips}</div>`;
+      let extra='';
+      if(hol) extra+=`<div class="hol-tag" title="${U.esc(hol.name)}">🏖 ${U.esc(hol.name)}</div>`;
+      if(hasAvail&&!hasUnavail) extra+=`<div class="av-tag av-tag-yes">✓ Available</div>`;
+      if(hasUnavail) extra+=`<div class="av-tag av-tag-no">✗ Unavailable</div>`;
 
       const d=el('div',cls);
-      d.innerHTML=`<div class="dn">${day}</div><div class="dslots">${chips}</div>`;
+      d.innerHTML=`<div class="dn">${day}</div><div class="dslots">${body}${extra}</div>`;
       // Bind chip clicks via addEventListener (onclick attributes are blocked by CSP)
       d.querySelectorAll('.chip[data-eid]').forEach(chip=>{
         chip.addEventListener('click',ev=>{ ev.stopPropagation(); Slot.edit(chip.dataset.eid); });
@@ -510,6 +679,7 @@ const Cal = {
 
   _renderWeek(){
     const today=U.today();
+    const country=App.user?.country||'';
     // Find Monday of current week
     const d=new Date(this.cur);
     const dow=d.getDay()===0?6:d.getDay()-1;
@@ -522,6 +692,13 @@ const Cal = {
     const startLabel=days[0].toLocaleDateString('en-GB',{day:'numeric',month:'short'});
     const endLabel=days[6].toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
     document.getElementById('cal-lbl').textContent=startLabel+' – '+endLabel;
+
+    // Warm holiday cache for years touched by this week
+    if(country){
+      const years=[...new Set(days.map(dd=>dd.getFullYear()))];
+      const needed=years.some(yr=>!Hol.cache[Hol._code(country)]?.[yr]);
+      if(needed){ Promise.all(years.map(yr=>Hol.forYear(country,yr))).then(()=>this.render()); }
+    }
 
     const uid=App.user.uid;
     const entries=Cache.entriesArr().filter(e=>e.userId===uid);
@@ -549,28 +726,48 @@ const Cal = {
       const avRules=aMap[ds]||[];
       const hasAvail=avRules.some(r=>r.type==='available');
       const hasUnavail=avRules.some(r=>r.type==='unavailable');
+      const hol=country?Hol.get(country,ds):null;
       const dayDiv=document.createElement('div');
-      dayDiv.className='week-day'+(isT?' is-today':hasUnavail?' is-unavail':hasAvail?' is-avail':'');
+      let wdClasses='week-day';
+      if(isT) wdClasses+=' is-today';
+      else if(hol) wdClasses+=' is-holiday';
+      else if(hasUnavail) wdClasses+=' is-unavail';
+      else if(hasAvail) wdClasses+=' is-avail';
+      dayDiv.className=wdClasses;
       // Header
       const hdr=document.createElement('div'); hdr.className='week-day-hdr';
       hdr.innerHTML='<span class="wdn">'+WDAYS[i]+'</span><span class="wdd">'+d.getDate()+'</span>';
       hdr.addEventListener('click',()=>this._dayClick(ds,de,avRules));
-      // Body
+      // Body with AM/PM split lanes matching the admin timeline layout
       const body=document.createElement('div'); body.className='week-day-body';
-      if(!de.length && !hasAvail && !hasUnavail){
-        body.innerHTML='<span class="cal-free-lbl">Free</span>';
-      } else {
-        de.forEach(e=>{
+      if(hol){
+        const h=document.createElement('div'); h.className='hol-tag';
+        h.textContent='🏖 '+(hol.name||'Holiday'); h.title=hol.name||'';
+        body.appendChild(h);
+      }
+      const amBookings=de.filter(e=>e.slot==='Half Day AM'||e.slot==='Full Day');
+      const pmBookings=de.filter(e=>e.slot==='Half Day PM'||e.slot==='Full Day');
+      const buildLane=(cls, label, bookings)=>{
+        const lane=document.createElement('div'); lane.className='week-half '+cls;
+        const lbl=document.createElement('div'); lbl.className='week-half-lbl'; lbl.textContent=label;
+        lane.appendChild(lbl);
+        if(!bookings.length){
+          const ph=document.createElement('span'); ph.className='cal-free-lbl'; ph.textContent='—';
+          lane.appendChild(ph);
+        } else bookings.forEach(e=>{
           const chip=document.createElement('div');
           chip.className='chip '+U.chipCls(e.slot);
-          chip.style.marginBottom='.2rem';
-          chip.innerHTML=U.esc(e.clientName||e.slot)+'<div class="chip-sub">'+U.esc(e.factory||'')+'</div>';
+          const clip=entryHasDocs(e)?'<span class="has-docs-icon" title="Has documents">📎</span>':'';
+          chip.innerHTML=U.esc(e.clientName||e.slot)+clip+'<div class="chip-sub">'+U.esc(entryFactoryLabel(e))+'</div>';
           chip.addEventListener('click',ev=>{ ev.stopPropagation(); Slot.edit(e.id); });
-          body.appendChild(chip);
+          lane.appendChild(chip);
         });
-        if(hasAvail&&!hasUnavail){ const t=document.createElement('div'); t.className='av-tag av-tag-yes'; t.style.fontSize='.65rem'; t.textContent='✓ Avail'; body.appendChild(t); }
-        if(hasUnavail){ const t=document.createElement('div'); t.className='av-tag av-tag-no'; t.style.fontSize='.65rem'; t.textContent='✗ Unavail'; body.appendChild(t); }
-      }
+        return lane;
+      };
+      body.appendChild(buildLane('week-am','AM',amBookings));
+      body.appendChild(buildLane('week-pm','PM',pmBookings));
+      if(hasAvail&&!hasUnavail){ const t=document.createElement('div'); t.className='av-tag av-tag-yes'; t.style.fontSize='.65rem'; t.textContent='✓ Avail'; body.appendChild(t); }
+      if(hasUnavail){ const t=document.createElement('div'); t.className='av-tag av-tag-no'; t.style.fontSize='.65rem'; t.textContent='✗ Unavail'; body.appendChild(t); }
       dayDiv.appendChild(hdr); dayDiv.appendChild(body);
       grid.appendChild(dayDiv);
     });
@@ -600,9 +797,12 @@ const Cal = {
       const dateDiv=document.createElement('div'); dateDiv.className='cl-date';
       dateDiv.innerHTML='<div>'+d.getDate()+'</div><div class="cl-date-sub">'+d.toLocaleDateString('en-GB',{weekday:'short'})+'</div>';
       const info=document.createElement('div'); info.className='cl-info';
-      const qty=(e.expectedQty!=null||e.finalQty!=null)?(' · Exp: '+(e.expectedQty??'—')+' / Final: '+(e.finalQty??'—')):'';
-      info.innerHTML='<div class="cl-client">'+U.esc(e.clientName||'—')+' <span class="badge badge-sm '+U.badgeCls(e.slot)+'">'+e.slot+'</span></div>'
-        +'<div class="cl-detail">'+U.esc(e.factory||'')+qty+(e.notes?' · '+U.esc(e.notes):'')+'</div>';
+      const te=entryTotalExpected(e), tf=entryTotalFinal(e);
+      const qty=(te!=null||tf!=null)?(' · Exp: '+(te??'—')+' / Final: '+(tf??'—')):'';
+      const docCount=entryDocCount(e);
+      const docsBadge=docCount>0?`<span class="cl-docs-badge" title="${docCount} document${docCount>1?'s':''} attached">📎 ${docCount}</span>`:'';
+      info.innerHTML='<div class="cl-client">'+U.esc(e.clientName||'—')+' <span class="badge badge-sm '+U.badgeCls(e.slot)+'">'+e.slot+'</span>'+docsBadge+'</div>'
+        +'<div class="cl-detail">'+U.esc(entryFactoryLabel(e))+qty+(e.notes?' · '+U.esc(e.notes):'')+'</div>';
       row.appendChild(dateDiv); row.appendChild(info);
       row.addEventListener('click',()=>Slot.edit(e.id));
       wrap.appendChild(row);
@@ -640,6 +840,11 @@ const Slot = {
       nameEl.style.display='none';
     }
   },
+  // Current modal's manufacturer list (kept in JS memory, serialized on save).
+  // Shape: [{ factory, expectedQty|null, finalQty|null, documents:[] }]
+  _mfrs: [],
+  _activeEntryId: '',          // the entry id currently being edited (for doc uploads)
+
   add(date, forUid=null){
     this._reset();
     document.getElementById('ms-title').textContent='Add Booking';
@@ -651,35 +856,33 @@ const Slot = {
     document.getElementById('ms-recur-wrap').style.display='block';
     const targetUid=forUid||App.user.uid;
     this._setForUser(targetUid);
-    this._fillClients(targetUid,'','');
+    this._fillClients(targetUid,'');
+    this._mfrs=[{factory:'',expectedQty:null,finalQty:null,documents:[]}];
+    this._renderMfrs();
+    this._checkHolidayWarn();
     M.open('m-slot');
   },
   edit(id){
     const e=Cache.entries[id]; if(!e) return;
     if(!this._canManage(e.userId)) return;
     this._reset();
+    this._activeEntryId=id;
     document.getElementById('ms-title').textContent='Edit Booking';
     document.getElementById('ms-id').value=id;
     document.getElementById('ms-date').value=e.date;
     document.getElementById('ms-notes').value=e.notes||'';
-    document.getElementById('ms-eqty').value=e.expectedQty!=null?e.expectedQty:'';
-    document.getElementById('ms-fqty').value=e.finalQty!=null?e.finalQty:'';
     document.getElementById('ms-del').style.display='inline-flex';
     // Hide recurrence in edit mode — edits always affect a single occurrence
     document.getElementById('ms-recur-wrap').style.display='none';
     document.getElementById('btn-save-slot').textContent='Save booking';
     this.pick(e.slot);
     this._setForUser(e.userId);
-    this._fillClients(e.userId||App.user.uid, e.clientId||'', e.factory||'');
-    // Show documents section in edit mode
-    document.getElementById('ms-docs-wrap').style.display='block';
-    this._renderDocs(e);
-    // Wire upload input — re-attach each open to avoid duplicate listeners
-    const inp=document.getElementById('ms-doc-input');
-    inp.value=''; // reset file input
-    const fresh=inp.cloneNode(true);
-    inp.parentNode.replaceChild(fresh,inp);
-    fresh.addEventListener('change',()=>Drive.uploadFromInput(fresh,id));
+    this._fillClients(e.userId||App.user.uid, e.clientId||'');
+    // Hydrate manufacturers list from entry (normalizes legacy single-mfr bookings)
+    this._mfrs=normalizeManufacturers(e).map(m=>({...m, documents:[...(m.documents||[])]}));
+    if(!this._mfrs.length) this._mfrs=[{factory:'',expectedQty:null,finalQty:null,documents:[]}];
+    this._renderMfrs();
+    this._checkHolidayWarn();
     M.open('m-slot');
   },
   pick(type){
@@ -690,19 +893,19 @@ const Slot = {
     else document.getElementById('sb-p').classList.add('on-pm');
   },
   _reset(){
-    ['ms-id','ms-date','ms-notes','ms-eqty','ms-fqty','ms-from','ms-to','ms-until'].forEach(id=>document.getElementById(id).value='');
+    ['ms-id','ms-date','ms-notes','ms-from','ms-to','ms-until'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
     document.getElementById('ms-type').value='';
     document.getElementById('ms-repeat').value='none';
     document.getElementById('ms-err').style.display='none';
-    document.getElementById('ms-docs-wrap').style.display='none';
-    document.getElementById('ms-docs-list').innerHTML='';
-    document.getElementById('ms-doc-status').textContent='';
-    document.getElementById('ms-doc-status').className='';
+    document.getElementById('ms-mfrs-list').innerHTML='';
+    const hw=document.getElementById('ms-holiday-warn'); if(hw){ hw.style.display='none'; hw.textContent=''; }
     ['sb-f','sb-a','sb-p'].forEach(id=>document.getElementById(id).className='slt-btn');
     document.querySelectorAll('#ms-wd-btns .wd-btn').forEach(b=>b.classList.remove('on'));
+    this._mfrs=[];
+    this._activeEntryId='';
     this.onRepeatChange(); // resets sub-section visibility and button label
   },
-  _fillClients(uid,selCid,selFac){
+  _fillClients(uid,selCid){
     // super_admin can book against any client; everyone else sees only their assigned clients
     const targetUser=Cache.users[uid]||App.user;
     const clients=targetUser.role==='super_admin'
@@ -711,26 +914,150 @@ const Slot = {
     const cs=document.getElementById('ms-client');
     cs.innerHTML='<option value="">Select client…</option>';
     clients.forEach(c=>cs.innerHTML+=`<option value="${c.id}" ${c.id===selCid?'selected':''}>${U.esc(c.name)}</option>`);
-    this._fillFacs(selCid,selFac);
   },
-  _fillFacs(cid,selFac){
-    const fs=document.getElementById('ms-factory');
-    fs.innerHTML='<option value="">Select factory…</option>';
-    const c=Cache.clients[cid]; if(!c) return;
-    (c.factories||[]).forEach(f=>fs.innerHTML+=`<option value="${U.esc(f)}" ${f===selFac?'selected':''}>${U.esc(f)}</option>`);
-    if(selFac&&!(c.factories||[]).includes(selFac)) fs.innerHTML+=`<option value="${U.esc(selFac)}" selected>${U.esc(selFac)}</option>`;
+  // When client changes we reset each mfr's factory (options depend on client)
+  onClientChange(){
+    // Clear factory selections (they depend on client) but keep qty/docs
+    this._mfrs=this._mfrs.map(m=>({...m, factory:''}));
+    this._renderMfrs();
   },
-  onClientChange(){ this._fillFacs(document.getElementById('ms-client').value,''); },
 
-  _renderDocs(entry){
-    const docs=entry.documents||[];
-    const list=document.getElementById('ms-docs-list');
-    if(!docs.length){ list.innerHTML='<div style="font-size:.78rem;color:var(--txs)">No documents yet.</div>'; return; }
-    const ICONS={'application/pdf':'📄','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'📊','application/vnd.ms-excel':'📊','text/csv':'📋','image':'🖼','video':'🎞'};
-    list.innerHTML=docs.map(d=>{
-      const ico=ICONS[d.mimeType]||( d.mimeType?.startsWith('image')? ICONS['image'] : d.mimeType?.startsWith('video')? ICONS['video'] : '📎' );
-      return `<div class="doc-item"><span class="doc-item-icon">${ico}</span><a href="${U.esc(d.webViewLink)}" target="_blank" rel="noopener" class="doc-item-name">${U.esc(d.name)}</a></div>`;
+  // ── MANUFACTURERS UI ───────────────────────────────────────────
+  _factoryOptsHtml(selFac){
+    const cid=document.getElementById('ms-client').value;
+    const c=Cache.clients[cid];
+    let opts='<option value="">Select factory…</option>';
+    if(!c) return opts;
+    (c.factories||[]).forEach(f=>{ opts+=`<option value="${U.esc(f)}" ${f===selFac?'selected':''}>${U.esc(f)}</option>`; });
+    if(selFac && !(c.factories||[]).includes(selFac)) opts+=`<option value="${U.esc(selFac)}" selected>${U.esc(selFac)}</option>`;
+    return opts;
+  },
+  _renderMfrs(){
+    const list=document.getElementById('ms-mfrs-list');
+    const facOpts=(selFac)=>this._factoryOptsHtml(selFac||'');
+    list.innerHTML=this._mfrs.map((m,i)=>{
+      const delBtn=this._mfrs.length>1
+        ? `<button type="button" class="mfr-row-del" data-midx="${i}" title="Remove this manufacturer">✕ Remove</button>`
+        : '';
+      return `<div class="mfr-row" data-midx="${i}">
+        <div class="mfr-row-head">
+          <span class="mfr-row-num">Manufacturer ${i+1}</span>
+          ${delBtn}
+        </div>
+        <div class="fg">
+          <label class="lbl">Factory</label>
+          <select class="sel mfr-factory" data-midx="${i}">${facOpts(m.factory)}</select>
+        </div>
+        <div class="row2">
+          <div class="fg"><label class="lbl">Expected Qty <span class="lbl-opt">(opt.)</span></label>
+            <input type="number" class="inp inp-num mfr-eqty" data-midx="${i}" min="0" step="1" placeholder="—" value="${m.expectedQty!=null?m.expectedQty:''}"></div>
+          <div class="fg"><label class="lbl">Final Qty <span class="lbl-opt">(opt.)</span></label>
+            <input type="number" class="inp inp-num mfr-fqty" data-midx="${i}" min="0" step="1" placeholder="—" value="${m.finalQty!=null?m.finalQty:''}"></div>
+        </div>
+        <div class="mfr-docs-wrap">
+          <label class="lbl">Documents</label>
+          <div class="mfr-docs-list" data-midx="${i}">${this._mfrDocsHtml(m.documents||[])}</div>
+          <button type="button" class="btn btn-s btn-sm mfr-doc-upload-btn" data-midx="${i}">⬆ Upload document</button>
+          <div class="mfr-doc-status" data-midx="${i}"></div>
+        </div>
+      </div>`;
     }).join('');
+
+    // Wire events
+    list.querySelectorAll('.mfr-factory').forEach(sel=>{
+      sel.addEventListener('change',()=>{ const i=+sel.dataset.midx; if(this._mfrs[i]) this._mfrs[i].factory=sel.value; });
+    });
+    list.querySelectorAll('.mfr-eqty').forEach(inp=>{
+      inp.addEventListener('input',()=>{ const i=+inp.dataset.midx; if(this._mfrs[i]) this._mfrs[i].expectedQty=U.int(inp.value); });
+    });
+    list.querySelectorAll('.mfr-fqty').forEach(inp=>{
+      inp.addEventListener('input',()=>{ const i=+inp.dataset.midx; if(this._mfrs[i]) this._mfrs[i].finalQty=U.int(inp.value); });
+    });
+    list.querySelectorAll('.mfr-row-del').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const i=+btn.dataset.midx;
+        if(this._mfrs.length<=1) return;
+        if(!confirm(`Remove Manufacturer ${i+1}? Any unsaved quantities or documents attached to this manufacturer will be lost.`)) return;
+        this._mfrs.splice(i,1);
+        this._renderMfrs();
+      });
+    });
+    list.querySelectorAll('.mfr-doc-upload-btn').forEach(btn=>{
+      btn.addEventListener('click',()=>this._uploadDocForMfr(+btn.dataset.midx));
+    });
+    // Per-document delete handlers (delegated)
+    list.querySelectorAll('.mfr-doc-del').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const mi=+btn.dataset.midx, di=+btn.dataset.didx;
+        if(this._mfrs[mi]?.documents?.[di]){
+          if(!confirm('Remove this document link? (The file itself will remain in Google Drive.)')) return;
+          this._mfrs[mi].documents.splice(di,1);
+          this._renderMfrs();
+        }
+      });
+    });
+  },
+  _mfrDocsHtml(docs){
+    if(!docs||!docs.length) return '<div class="mfr-doc-status">No documents yet.</div>';
+    const ICONS={'application/pdf':'📄','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'📊','application/vnd.ms-excel':'📊','text/csv':'📋','image':'🖼','video':'🎞'};
+    return docs.map((d,di)=>{
+      const ico=ICONS[d.mimeType]||( d.mimeType?.startsWith('image')? ICONS['image'] : d.mimeType?.startsWith('video')? ICONS['video'] : '📎' );
+      // mfr index is added by caller
+      return `<div class="mfr-doc-item"><span>${ico}</span><a href="${U.esc(d.webViewLink)}" target="_blank" rel="noopener">${U.esc(d.name)}</a><button type="button" class="mfr-doc-del" data-midx="__MI__" data-didx="${di}" title="Remove">✕</button></div>`;
+    }).join('');
+  },
+  // Delegates to Drive.uploadFromInput for the given manufacturer index.
+  // For Add-mode bookings (no entry id yet) we still allow upload — it saves
+  // against a temporary uuid, and on save the entry is created with that id.
+  _uploadDocForMfr(mIdx){
+    // Ensure a stable entry id exists for Drive folder path (create one if in Add mode)
+    let eid=document.getElementById('ms-id').value || this._activeEntryId;
+    if(!eid){
+      eid=U.uuid();
+      this._activeEntryId=eid;
+      document.getElementById('ms-id').value=eid;
+      // Flag: this entry hasn't been persisted yet. We save it at _saveOne time.
+      this._pendingCreate=true;
+    }
+    const inp=document.getElementById('ms-doc-input');
+    inp.value='';
+    const fresh=inp.cloneNode(true);
+    inp.parentNode.replaceChild(fresh,inp);
+    fresh.addEventListener('change',()=>Drive.uploadFromInput(fresh, eid, mIdx));
+    fresh.click();
+  },
+  _renderMfrDocs(mIdx){
+    const list=document.querySelector(`.mfr-docs-list[data-midx="${mIdx}"]`);
+    if(!list) return;
+    list.innerHTML=this._mfrDocsHtml(this._mfrs[mIdx]?.documents||[]).replace(/__MI__/g,String(mIdx));
+    list.querySelectorAll('.mfr-doc-del').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const mi=+btn.dataset.midx, di=+btn.dataset.didx;
+        if(!confirm('Remove this document link? (The file itself will remain in Google Drive.)')) return;
+        this._mfrs[mi]?.documents?.splice(di,1);
+        this._renderMfrs();
+      });
+    });
+  },
+
+  // ── HOLIDAY WARNING ───────────────────────────────────────────
+  // Shown in modal when the selected date (or range) falls on a public holiday
+  // for the target controller's country. Does NOT block saves (informational).
+  async _checkHolidayWarn(){
+    const hw=document.getElementById('ms-holiday-warn');
+    if(!hw) return;
+    const uid=document.getElementById('ms-for').value||App.user?.uid;
+    const country=Cache.users[uid]?.country||'';
+    if(!country){ hw.style.display='none'; return; }
+    const date=document.getElementById('ms-date').value;
+    if(!date){ hw.style.display='none'; return; }
+    await Hol.prefetchRange(country,date,date);
+    const h=Hol.get(country,date);
+    if(h){
+      hw.className='holiday-warn';
+      hw.textContent=`⚠ ${U.fmt(date)} is a public holiday in ${country}: ${h.name}. You can still save this booking, but it will be skipped for recurring rules.`;
+      hw.style.display='block';
+    } else { hw.style.display='none'; }
   },
 
   // ── Recurrence UI visibility ──────────────────────────────────────────
@@ -784,6 +1111,21 @@ const Slot = {
     }
     return [];
   },
+  // Build the canonical manufacturers array + the mirrored top-level legacy fields
+  // in one place, so every save path produces a consistent entry shape.
+  _serializeManufacturers(){
+    const mfrs=(this._mfrs||[])
+      .map(m=>({
+        factory: (m.factory||'').trim(),
+        expectedQty: m.expectedQty!=null?m.expectedQty:null,
+        finalQty: m.finalQty!=null?m.finalQty:null,
+        documents: Array.isArray(m.documents)?m.documents:[]
+      }))
+      // Keep only rows that have at least a factory selected OR documents attached
+      .filter(m=>m.factory||m.documents.length);
+    return mfrs;
+  },
+
   async save(){
     const id=document.getElementById('ms-id').value;
     const date=document.getElementById('ms-date').value;
@@ -793,9 +1135,6 @@ const Slot = {
     const until=document.getElementById('ms-until').value;
     const type=document.getElementById('ms-type').value;
     const cid=document.getElementById('ms-client').value;
-    const fac=document.getElementById('ms-factory').value;
-    const eqty=U.int(document.getElementById('ms-eqty').value);
-    const fqty=U.int(document.getElementById('ms-fqty').value);
     const notes=document.getElementById('ms-notes').value.trim();
     const wdSel=[...document.querySelectorAll('#ms-wd-btns .wd-btn.on')];
     const err=document.getElementById('ms-err');
@@ -816,25 +1155,61 @@ const Slot = {
     }
     if(repeat==='weekdays'&&!wdSel.length){ err.textContent='Please select at least one day of the week.'; err.style.display='block'; return; }
 
-    // ── Slot / client / factory ──────────────────────────────────────────
+    // ── Slot / client / manufacturers ────────────────────────────────────
     if(!type){ err.textContent='Please select a time slot.'; err.style.display='block'; return; }
     if(!cid){ err.textContent='Please select a client.'; err.style.display='block'; return; }
-    if(!fac){ err.textContent='Please select a factory.'; err.style.display='block'; return; }
+    const manufacturers=this._serializeManufacturers();
+    if(!manufacturers.length||!manufacturers.some(m=>m.factory)){
+      err.textContent='Please select at least one factory/manufacturer.'; err.style.display='block'; return;
+    }
+    // Each selected manufacturer row must have a factory picked
+    const missingFac=manufacturers.findIndex(m=>!m.factory);
+    if(missingFac>=0){ err.textContent=`Manufacturer ${missingFac+1} is missing a factory. Pick one or remove the row.`; err.style.display='block'; return; }
+    // Disallow the same factory being listed twice in one booking
+    const facSet=new Set();
+    for(const m of manufacturers){
+      if(facSet.has(m.factory)){ err.textContent=`Manufacturer "${m.factory}" is listed twice — each factory can appear at most once per booking.`; err.style.display='block'; return; }
+      facSet.add(m.factory);
+    }
 
     const targetUid=document.getElementById('ms-for').value||App.user.uid;
     const targetUser=Cache.users[targetUid]||App.user;
     const c=Cache.clients[cid];
 
+    // Legacy top-level mirror fields (kept for readers/CSV that haven't been migrated).
+    // factory = first manufacturer (most representative), quantities = sums across mfrs.
+    const firstFac=manufacturers[0]?.factory||'';
+    const sumExp=manufacturers.reduce((s,m)=>s+(m.expectedQty!=null?m.expectedQty:0),0);
+    const sumFin=manufacturers.reduce((s,m)=>s+(m.finalQty!=null?m.finalQty:0),0);
+    const anyExp=manufacturers.some(m=>m.expectedQty!=null);
+    const anyFin=manufacturers.some(m=>m.finalQty!=null);
+    const legacyDocs=manufacturers[0]?.documents||[];
+
+    const buildEntry=(eid,dateStr,baseCreated)=>({
+      id:eid,userId:targetUid,userName:targetUser.name,userEmail:targetUser.email,userCountry:targetUser.country||'',
+      date:dateStr,slot:type,clientId:cid,clientName:c?.name||'',
+      // Canonical multi-manufacturer storage
+      manufacturers,
+      // Legacy mirrors (still read by older code paths)
+      factory:firstFac,
+      expectedQty:anyExp?sumExp:null,
+      finalQty:anyFin?sumFin:null,
+      documents:legacyDocs,
+      notes,
+      updated:Date.now(),created:baseCreated||Date.now()
+    });
+
     // ── Single-entry path (edit or no-repeat add) ────────────────────────
     if(id||repeat==='none'){
-      const conflict=Cache.entriesArr().find(e=>e.id!==id&&e.userId===targetUid&&e.date===date&&e.slot===type);
+      const eid=id||document.getElementById('ms-id').value||U.uuid();
+      const conflict=Cache.entriesArr().find(e=>e.id!==eid&&e.userId===targetUid&&e.date===date&&e.slot===type);
       if(conflict){ err.textContent=`${targetUser.name} already has a "${type}" on this date.`; err.style.display='block'; return; }
       Spin.on();
       try{
-        const eid=id||U.uuid();
         const base=id?{...Cache.entries[id]}:{};
-        const entry={...base,id:eid,userId:targetUid,userName:targetUser.name,userEmail:targetUser.email,userCountry:targetUser.country||'',date,slot:type,clientId:cid,clientName:c?.name||'',factory:fac,expectedQty:eqty,finalQty:fqty,notes,updated:Date.now(),created:base.created||Date.now()};
+        const entry=buildEntry(eid,date,base.created);
         await fbSet(`entries/${eid}`,entry); Cache.entries[eid]=entry;
+        this._pendingCreate=false;
         M.close('m-slot');
         if(this._isAdmin()){ Adm.refresh(); }
         else if(App.user?.role==='team_manager'){ Mgr.refresh(); }
@@ -846,32 +1221,46 @@ const Slot = {
     }
 
     // ── Recurring path ───────────────────────────────────────────────────
+    // Warm holiday cache for the target country before expanding, so we can skip.
+    if(targetUser.country){
+      const y1=(date||from||'').slice(0,4)||String(new Date().getFullYear());
+      const y2=(until||to||date||from||'').slice(0,4)||y1;
+      await Hol.prefetchRange(targetUser.country, `${y1}-01-01`, `${y2}-12-31`);
+    }
+
     const dates=this._expandDates();
     if(!dates.length){ err.textContent='No dates generated — check your recurrence settings.'; err.style.display='block'; return; }
     if(dates.length>365){ err.textContent=`Too many occurrences (${dates.length}). Shorten the period.`; err.style.display='block'; return; }
 
-    // Partition into skip (conflict) vs create
-    const toCreate=[], skipped=[];
+    // Partition into skip (conflict / holiday) vs create.
+    // Feature 6: national holidays for the target controller's country are skipped.
+    const toCreate=[], skippedConflict=[], skippedHoliday=[];
     for(const d of dates){
-      if(Cache.entriesArr().find(e=>e.userId===targetUid&&e.date===d&&e.slot===type)) skipped.push(d);
+      if(targetUser.country && Hol.is(targetUser.country,d)){ skippedHoliday.push(d); continue; }
+      if(Cache.entriesArr().find(e=>e.userId===targetUid&&e.date===d&&e.slot===type)) skippedConflict.push(d);
       else toCreate.push(d);
     }
-    if(!toCreate.length){ err.textContent=`All ${dates.length} date${dates.length>1?'s':''} already have a "${type}" booking.`; err.style.display='block'; return; }
+    if(!toCreate.length){
+      const reason=skippedHoliday.length&&!skippedConflict.length
+        ?`All ${dates.length} date${dates.length>1?'s':''} fall on public holidays in ${targetUser.country} — nothing to create.`
+        :`All ${dates.length} date${dates.length>1?'s':''} already have a "${type}" booking.`;
+      err.textContent=reason; err.style.display='block'; return;
+    }
 
     Spin.on();
     try{
       for(const d of toCreate){
         const eid=U.uuid();
-        const entry={id:eid,userId:targetUid,userName:targetUser.name,userEmail:targetUser.email,userCountry:targetUser.country||'',date:d,slot:type,clientId:cid,clientName:c?.name||'',factory:fac,expectedQty:eqty,finalQty:fqty,notes,updated:Date.now(),created:Date.now()};
+        const entry=buildEntry(eid,d);
         await fbSet(`entries/${eid}`,entry); Cache.entries[eid]=entry;
       }
       M.close('m-slot');
       if(this._isAdmin()){ Adm.refresh(); }
       else if(App.user?.role==='team_manager'){ Mgr.refresh(); }
       else { Cal.render(); }
-      const msg=skipped.length
-        ?`${toCreate.length} booking${toCreate.length>1?'s':''} created. ${skipped.length} skipped (conflict).`
-        :`${toCreate.length} booking${toCreate.length>1?'s':''} created.`;
+      let msg=`${toCreate.length} booking${toCreate.length>1?'s':''} created.`;
+      if(skippedConflict.length) msg+=` ${skippedConflict.length} skipped (conflict).`;
+      if(skippedHoliday.length)  msg+=` ${skippedHoliday.length} skipped (public holiday).`;
       toast(msg);
     } catch(e){ toast('Save failed: '+e.message,'err'); }
     finally{ Spin.off(); }
@@ -1208,7 +1597,12 @@ const Adm = {
     if(st.type==='booked'){
       // All bookings (Full Day / Half AM / Half PM) use the same blue colour
       cls+=' tl-h-bk-f';
-      tip=`${U.esc(st.e.slot)} – ${U.esc(st.e.clientName||'')}${st.e.factory?' @ '+U.esc(st.e.factory):''}${st.e.expectedQty!=null?' | Exp: '+st.e.expectedQty:''}${st.e.finalQty!=null?' | Final: '+st.e.finalQty:''}`;
+      // Add has-docs marker if this entry has documents (Feature 1 — paperclip indicator)
+      if(entryHasDocs(st.e)) cls+=' has-docs';
+      const facLbl=entryFactoryLabel(st.e);
+      const te=entryTotalExpected(st.e), tf=entryTotalFinal(st.e);
+      const dc=entryDocCount(st.e);
+      tip=`${U.esc(st.e.slot)} – ${U.esc(st.e.clientName||'')}${facLbl?' @ '+U.esc(facLbl):''}${te!=null?' | Exp: '+te:''}${tf!=null?' | Final: '+tf:''}${dc?' | 📎 '+dc+' doc'+(dc>1?'s':''):''}`;
       eid=st.e.id;
     } else if(st.type==='absence'){
       cls+=st.absenceType==='holiday'?' tl-h-hol':' tl-h-sick';
@@ -1232,6 +1626,14 @@ const Adm = {
     // Filtered users (by country) — includes super_admin as a bookable person
     const allUsers=Cache.usersArr().filter(u=>isBookable(u)&&(!this.country||u.country===this.country));
     allUsers.sort((a,b)=>(a.country||'').localeCompare(b.country||'')||a.name.localeCompare(b.name));
+
+    // Feature 5 — prefetch holidays for every distinct country represented in this view.
+    // Re-render once the network fetch lands so newly-loaded holidays appear as tags.
+    const ctryList=[...new Set(allUsers.map(u=>u.country).filter(Boolean))];
+    const missing=ctryList.filter(c=>!Hol.cache[Hol._code(c)]?.[y]);
+    if(missing.length){
+      Promise.all(missing.map(c=>Hol.forYear(c,y))).then(()=>this._render());
+    }
 
     // Entry map by userId+date
     const eMap={};
@@ -1278,7 +1680,11 @@ const Adm = {
         // Build AM and PM half states independently (booking > unavail > avail > empty)
         const amSt=this._halfState(de,av,true), pmSt=this._halfState(de,av,false);
         const amH=this._halfHtml(amSt,true,ds,u.uid), pmH=this._halfHtml(pmSt,false,ds,u.uid);
-        body+=`<td class="${isT?'tc-td':isW?'wknd-col':''}"><div class="tl-cell">${amH}${pmH}</div></td>`;
+        // Feature 5 — holiday overlay for this user's country on this date
+        const hol=u.country?Hol.get(u.country,ds):null;
+        const tdCls=(isT?'tc-td':isW?'wknd-col':'')+(hol?' tl-hol-day':'');
+        const holAttr=hol?` title="🏖 ${U.esc(hol.name)}" data-hol="1"`:'';
+        body+=`<td class="${tdCls}"${holAttr}><div class="tl-cell">${amH}${pmH}</div></td>`;
       }
       body+='</tr>';
     });
@@ -1310,6 +1716,14 @@ const Adm = {
     const dow=base.getDay()===0?6:base.getDay()-1;
     base.setDate(base.getDate()-dow);
     const days=[]; for(let i=0;i<7;i++){ const d=new Date(base); d.setDate(base.getDate()+i); days.push(d); }
+    // Feature 5 — prefetch holidays for years touched by this week, for all countries in view
+    {
+      const yrs=[...new Set(days.map(d=>d.getFullYear()))];
+      const viewUsers=Cache.usersArr().filter(u=>isBookable(u)&&(!this.country||u.country===this.country));
+      const ctries=[...new Set(viewUsers.map(u=>u.country).filter(Boolean))];
+      const missing=[]; ctries.forEach(c=>yrs.forEach(yr=>{ if(!Hol.cache[Hol._code(c)]?.[yr]) missing.push([c,yr]); }));
+      if(missing.length) Promise.all(missing.map(([c,yr])=>Hol.forYear(c,yr))).then(()=>this._render());
+    }
     const startLabel=days[0].toLocaleDateString('en-GB',{day:'numeric',month:'short'});
     const endLabel=days[6].toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
     document.getElementById('adm-lbl').textContent=`${startLabel} – ${endLabel}`;
@@ -1342,7 +1756,10 @@ const Adm = {
         const av=aMap[u.uid+'|'+ds]||[];
         const amSt=this._halfState(de,av,true), pmSt=this._halfState(de,av,false);
         const amH=this._halfHtml(amSt,true,ds,u.uid), pmH=this._halfHtml(pmSt,false,ds,u.uid);
-        html+=`<td class="${isT?'tc-td':isW?'wknd-col':''}"><div class="tl-cell">${amH}${pmH}</div></td>`;
+        const hol=u.country?Hol.get(u.country,ds):null;
+        const tdCls=(isT?'tc-td':isW?'wknd-col':'')+(hol?' tl-hol-day':'');
+        const holAttr=hol?` title="🏖 ${U.esc(hol.name)}" data-hol="1"`:'';
+        html+=`<td class="${tdCls}"${holAttr}><div class="tl-cell">${amH}${pmH}</div></td>`;
       });
       html+='</tr>';
     });
@@ -1370,9 +1787,13 @@ const Adm = {
     const f=this.filtered;
     if(!f.length){ document.getElementById('ls-content').innerHTML='<div class="empty"><div class="empty-ic">📭</div><div class="empty-t">No bookings found</div><div class="empty-s">Adjust filters above.</div></div>'; return; }
     const sorted=[...f].sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
-    let html='<div class="ov-x-auto"><table class="ltab"><thead><tr><th>Date</th><th>Controller</th><th>Country</th><th>Slot</th><th>Client</th><th>Factory</th><th>Exp. Qty</th><th>Final Qty</th><th>Notes</th></tr></thead><tbody>';
+    let html='<div class="ov-x-auto"><table class="ltab"><thead><tr><th>Date</th><th>Controller</th><th>Country</th><th>Slot</th><th>Client</th><th>Factory</th><th>Exp. Qty</th><th>Final Qty</th><th>Docs</th><th>Notes</th></tr></thead><tbody>';
     sorted.forEach(e=>{
-      html+=`<tr data-eid="${e.id}" title="Click to edit"><td><strong>${U.fmt(e.date)}</strong></td><td>${U.flag(e.userCountry)} ${U.esc(e.userName)}</td><td>${U.esc(e.userCountry)}</td><td><span class="badge ${U.badgeCls(e.slot)}">${U.esc(e.slot)}</span></td><td>${U.esc(e.clientName)}</td><td>${U.esc(e.factory)}</td><td class="tbl-right">${e.expectedQty!=null?e.expectedQty:'<span class="tbl-qty-dash">—</span>'}</td><td class="tbl-right">${e.finalQty!=null?e.finalQty:'<span class="tbl-qty-dash">—</span>'}</td><td class="tbl-notes">${U.esc(e.notes)}</td></tr>`;
+      const facLbl=entryFactoryLabel(e);
+      const te=entryTotalExpected(e), tf=entryTotalFinal(e);
+      const dc=entryDocCount(e);
+      const docsCell=dc>0?`<span class="cl-docs-badge" title="${dc} document${dc>1?'s':''} attached">📎 ${dc}</span>`:'<span class="tbl-qty-dash">—</span>';
+      html+=`<tr data-eid="${e.id}" title="Click to edit"><td><strong>${U.fmt(e.date)}</strong></td><td>${U.flag(e.userCountry)} ${U.esc(e.userName)}</td><td>${U.esc(e.userCountry)}</td><td><span class="badge ${U.badgeCls(e.slot)}">${U.esc(e.slot)}</span></td><td>${U.esc(e.clientName)}</td><td>${U.esc(facLbl)}</td><td class="tbl-right">${te!=null?te:'<span class="tbl-qty-dash">—</span>'}</td><td class="tbl-right">${tf!=null?tf:'<span class="tbl-qty-dash">—</span>'}</td><td class="tbl-right">${docsCell}</td><td class="tbl-notes">${U.esc(e.notes)}</td></tr>`;
     });
     html+='</tbody></table></div>';
     document.getElementById('ls-content').innerHTML=html;
@@ -1989,46 +2410,65 @@ const Drive = {
   },
 
   // Main entry point: upload a file and attach it to an entry
-  async uploadFromInput(input, entryId){
+  // Uploads a single file to Drive and attaches the metadata to the specified
+  // manufacturer (mIdx) of the booking. The entry may not yet be persisted to
+  // Firebase (Add mode) — in that case we only update the in-memory Slot._mfrs
+  // buffer and let Slot.save() persist everything on submit.
+  async uploadFromInput(input, entryId, mIdx){
     const file=input.files?.[0]; if(!file) return;
-    const entry=Cache.entries[entryId]; if(!entry) return;
-    const status=document.getElementById('ms-doc-status');
-    const lbl=document.getElementById('ms-doc-upload-lbl');
-    status.textContent='Uploading…'; status.className='doc-status';
-    lbl.style.pointerEvents='none'; lbl.style.opacity='.55';
+    const statusEl=document.querySelector(`.mfr-doc-status[data-midx="${mIdx}"]`);
+    const btn=document.querySelector(`.mfr-doc-upload-btn[data-midx="${mIdx}"]`);
+    const setStatus=(t,isErr)=>{ if(!statusEl) return; statusEl.textContent=t; statusEl.className='mfr-doc-status'+(isErr?' err':''); };
+    setStatus('Uploading…', false);
+    if(btn){ btn.style.pointerEvents='none'; btn.style.opacity='.55'; }
     try{
+      // Resolve the owning user/clientName/factory/date — prefer in-memory Slot state
+      // because the entry may not exist in Cache yet (Add mode with eager upload).
+      const targetUid=document.getElementById('ms-for').value||App.user.uid;
+      const user=Cache.users[targetUid]||App.user;
+      const cid=document.getElementById('ms-client').value;
+      const clientName=Cache.clients[cid]?.name||'Unknown';
+      const dateStr=document.getElementById('ms-date').value || document.getElementById('ms-from').value || U.today();
+      const factory=Slot._mfrs[mIdx]?.factory||'Unknown';
+
       const token=await this._token();
-      const user=Cache.users[entry.userId]||App.user;
       // Get-or-create controller root folder
       let rootId=user.driveRootFolderId;
       if(!rootId){
         rootId=await this._folder(user.name,null,token);
-        // Share with c.nocher@coradam.com (once, on creation)
         await this._share(rootId,token);
         const upd={...user,driveRootFolderId:rootId};
         await fbUpdate(`users/${user.uid}`,{driveRootFolderId:rootId});
         Cache.users[user.uid]=upd;
       }
       // Folder chain: client → factory → date
-      const clientId =await this._folder(entry.clientName||'Unknown',rootId,token);
-      const factoryId=await this._folder(entry.factory||'Unknown',clientId,token);
-      const dateId   =await this._folder(entry.date,factoryId,token);
+      const clientFolderId =await this._folder(clientName,rootId,token);
+      const factoryFolderId=await this._folder(factory,clientFolderId,token);
+      const dateFolderId   =await this._folder(dateStr,factoryFolderId,token);
       // Upload file
-      const result=await this._upload(file,dateId,token);
-      // Persist document reference in Firebase
+      const result=await this._upload(file,dateFolderId,token);
+      // Attach metadata to the correct manufacturer in the editor buffer
       const doc={id:U.uuid(),name:file.name,mimeType:file.type||'',driveId:result.id,webViewLink:result.webViewLink,uploadedAt:Date.now()};
-      const docs=[...(entry.documents||[]),doc];
-      await fbUpdate(`entries/${entryId}`,{documents:docs});
-      Cache.entries[entryId]={...entry,documents:docs};
-      // Refresh docs list in modal
-      Slot._renderDocs(Cache.entries[entryId]);
-      status.textContent='Uploaded successfully.';
+      if(!Slot._mfrs[mIdx]) return;
+      Slot._mfrs[mIdx].documents=[...(Slot._mfrs[mIdx].documents||[]),doc];
+
+      // If the entry is already persisted (edit mode), also push the update to
+      // Firebase so the document survives a browser close before the user hits
+      // "Save". In Add mode we rely on Slot.save() to persist everything atomically.
+      if(entryId && Cache.entries[entryId]){
+        const existing=Cache.entries[entryId];
+        const updatedMfrs=Slot._mfrs.map(m=>({factory:m.factory||'',expectedQty:m.expectedQty!=null?m.expectedQty:null,finalQty:m.finalQty!=null?m.finalQty:null,documents:[...(m.documents||[])]}));
+        await fbUpdate(`entries/${entryId}`,{manufacturers:updatedMfrs,documents:updatedMfrs[0]?.documents||[]});
+        Cache.entries[entryId]={...existing, manufacturers:updatedMfrs, documents:updatedMfrs[0]?.documents||[]};
+      }
+
+      Slot._renderMfrs();
+      setStatus('Uploaded successfully.', false);
     } catch(e){
       log.error('Drive upload error',e);
-      status.textContent='Upload failed: '+e.message;
-      status.className='doc-status err';
+      setStatus('Upload failed: '+e.message, true);
     } finally{
-      lbl.style.pointerEvents=''; lbl.style.opacity='';
+      if(btn){ btn.style.pointerEvents=''; btn.style.opacity=''; }
       input.value='';
     }
   }
@@ -2326,10 +2766,13 @@ const Mgr = {
     } else {
       entries.forEach(e=>{
         const cls=U.slotCls(e.slot);
+        const facLbl=entryFactoryLabel(e);
+        const dc=entryDocCount(e);
+        const clip=dc>0?` <span class="has-docs-icon" title="${dc} document${dc>1?'s':''} attached">📎${dc>1?' '+dc:''}</span>`:'';
         html+=`<div class="mgr-entry-row">
           <div class="mgr-entry-date">${U.fmt(e.date)}</div>
           <div class="mgr-entry-slot"><span class="chip c-${U.esc(cls)}">${U.esc(e.slot)}</span></div>
-          <div class="mgr-entry-detail">${U.esc(e.clientName||'')}${e.factory?' &mdash; '+U.esc(e.factory):''}</div>
+          <div class="mgr-entry-detail">${U.esc(e.clientName||'')}${facLbl?' &mdash; '+U.esc(facLbl):''}${clip}</div>
           <button class="btn btn-s btn-sm mgr-edit-btn" data-id="${U.esc(e.id)}">Edit</button>
         </div>`;
       });
@@ -3439,6 +3882,13 @@ function _bindEvents(){
   on('ms-del',        'click',()=>Slot.del());
   on('btn-cancel-slot','click',()=>M.close('m-slot'));
   on('btn-save-slot', 'click',()=>Slot.save());
+  // Add another manufacturer row
+  on('btn-add-mfr',   'click',()=>{
+    Slot._mfrs.push({factory:'',expectedQty:null,finalQty:null,documents:[]});
+    Slot._renderMfrs();
+  });
+  // Holiday warning reacts to date changes
+  on('ms-date',       'change',()=>Slot._checkHolidayWarn());
   // Weekday toggle buttons (Mon–Sun)
   document.querySelectorAll('#ms-wd-btns .wd-btn').forEach(b=>b.addEventListener('click',()=>b.classList.toggle('on')));
 
