@@ -266,7 +266,7 @@ const Sett = {
     const clients=Cache.clientsArr().sort((a,b)=>a.name.localeCompare(b.name));
     if(!clients.length){ document.getElementById('c-tbody').innerHTML=`<tr><td colspan="4" class="tbl-empty">No clients yet.</td></tr>`; return; }
     document.getElementById('c-tbody').innerHTML=clients.map(c=>{
-      const facs=(c.factories||[]).join(', ')||'—';
+      const facs=[...(c.factories||[])].sort((a,b)=>a.localeCompare(b)).join(', ')||'—';
       const auds=(c.userIds||[]).map(uid=>Cache.users[uid]?.name||'').filter(Boolean).join(', ')||'—';
       return `<tr><td><strong>${U.esc(c.name)}</strong></td><td class="tbl-detail">${U.esc(facs)}</td><td class="tbl-email">${U.esc(auds)}</td><td><button class="btn btn-s btn-sm" data-cid="${U.esc(c.id)}">Edit</button></td></tr>`;
     }).join('');

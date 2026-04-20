@@ -90,9 +90,10 @@ const Slot = {
   _fillClients(uid,selCid){
     // super_admin can book against any client; everyone else sees only their assigned clients
     const targetUser=Cache.users[uid]||App.user;
-    const clients=targetUser.role==='super_admin'
-      ?Cache.clientsArr().sort((a,b)=>a.name.localeCompare(b.name))
-      :Cache.clientsFor(uid);
+    const clients=(targetUser.role==='super_admin'
+      ?Cache.clientsArr()
+      :Cache.clientsFor(uid)
+    ).sort((a,b)=>a.name.localeCompare(b.name));
     const cs=document.getElementById('ms-client');
     cs.innerHTML='<option value="">Select client…</option>';
     clients.forEach(c=>cs.innerHTML+=`<option value="${c.id}" ${c.id===selCid?'selected':''}>${U.esc(c.name)}</option>`);
@@ -110,7 +111,7 @@ const Slot = {
     const c=Cache.clients[cid];
     let opts='<option value="">Select factory…</option>';
     if(!c) return opts;
-    (c.factories||[]).forEach(f=>{ opts+=`<option value="${U.esc(f)}" ${f===selFac?'selected':''}>${U.esc(f)}</option>`; });
+    [...(c.factories||[])].sort((a,b)=>a.localeCompare(b)).forEach(f=>{ opts+=`<option value="${U.esc(f)}" ${f===selFac?'selected':''}>${U.esc(f)}</option>`; });
     if(selFac && !(c.factories||[]).includes(selFac)) opts+=`<option value="${U.esc(selFac)}" selected>${U.esc(selFac)}</option>`;
     return opts;
   },

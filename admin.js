@@ -15,6 +15,11 @@ const Adm = {
     this._fillFilterOpts();
     this.applyFilters();
     Rpt.init();
+    // Pre-render reports so they are ready when the user opens the Reports tab
+    Rpt.render();
+    // Pre-warm analytics filters so the Analytics tab opens instantly
+    Anl._setDefaultDates();
+    Anl._fillFilterOpts();
   },
 
   async refresh(){

@@ -125,14 +125,12 @@ const Cal = {
   },
 
   _dayClick(ds, de, avRules){
-    if(de.length===0 && avRules.length===0){
-      App._pendingDate=ds;
-      document.getElementById('m-day-title').textContent=U.fmt(ds);
-      M.open('m-day');
-    } else if(de.length>0){
+    if(de.length>0){
+      // Existing booking — open edit modal
       Slot.edit(de[0].id);
     } else {
-      Avail.openForDate(ds, avRules[0]);
+      // No booking yet (day is empty or just available) — always invite a new booking
+      Slot.add(ds);
     }
   },
 
