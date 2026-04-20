@@ -114,7 +114,6 @@ function _bindEvents(){
   on('btn-import-csv',  'click',()=>Sett.bulkImport());
   on('btn-add-client',  'click',()=>Sett.openAddClient());
   on('btn-wipe-all',    'click',()=>Sett.wipeAll());
-  on('btn-change-cfg',  'click',()=>Setup.reset());
   on('btn-save-profile','click',()=>Sett.saveProfile());
 
   // ── Booking modal ──
