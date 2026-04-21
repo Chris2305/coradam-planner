@@ -1163,3 +1163,19 @@ code{background:#f1f5f9;border:1px solid var(--bdr);border-radius:4px;padding:1p
 .holiday-warn.warn-block{background:#fee2e2;border-color:#fca5a5;color:#991b1b}
 .holiday-skip-summary{font-size:.72rem;color:#9a3412;margin-top:.35rem;font-style:italic}
 
+/* ─── Impersonation banner & picker ─────────────────────────────── */
+.imp-bar{position:fixed;top:0;left:0;right:0;z-index:9999;display:flex;align-items:center;justify-content:space-between;padding:0 1.25rem;height:38px;background:#f59e0b;color:#78350f;font-size:.82rem;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.2);gap:.75rem}
+.imp-bar.d-none{display:none}
+.imp-bar-exit{background:rgba(0,0,0,.15);border:none;border-radius:5px;color:inherit;cursor:pointer;font-size:.78rem;font-weight:700;padding:.22rem .7rem;white-space:nowrap;flex-shrink:0}
+.imp-bar-exit:hover{background:rgba(0,0,0,.27)}
+/* When banner active: push sticky headers down so they sit below the banner */
+body.imp-active .hdr{top:38px}
+body.imp-active{padding-top:38px}
+/* User picker list */
+.modal-sub{font-size:.82rem;color:var(--tx2,#64748b);margin:-.45rem 0 .9rem;line-height:1.45}
+.imp-user-list{display:flex;flex-direction:column;gap:.3rem;max-height:400px;overflow-y:auto;margin-bottom:.5rem}
+.imp-user-btn{display:flex;align-items:center;justify-content:space-between;padding:.6rem .85rem;border:1.5px solid var(--bdr);border-radius:8px;background:#fff;cursor:pointer;transition:border-color .12s,background .12s;text-align:left;width:100%}
+.imp-user-btn:hover{border-color:var(--pl);background:#f0f7ff}
+.imp-user-name{font-weight:600;font-size:.88rem;color:var(--tx)}
+.imp-user-meta{font-size:.76rem;color:var(--txs);white-space:nowrap;margin-left:.5rem}
+
