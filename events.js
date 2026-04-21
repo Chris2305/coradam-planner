@@ -51,6 +51,11 @@ function _bindEvents(){
   on('btn-adm-settings','click',()=>App.goSettings());
   on('btn-signout-adm','click',()=>Auth.signOut());
 
+  // ── Impersonation ──
+  on('btn-adm-viewas', 'click', ()=>Impersonate.openPicker());
+  on('btn-imp-exit',   'click', ()=>Impersonate.stop());
+  on('btn-imp-cancel', 'click', ()=>M.close('m-impersonate'));
+
   // ── Admin filters ──
   on('f-mo','change',()=>Adm.applyFilters());
   on('f-us','change',()=>Adm.applyFilters());

@@ -33,6 +33,15 @@
 <div id="tip"></div>
 
 <!-- ══════════════════════════════
+     IMPERSONATION BANNER
+     Visible whenever super_admin is viewing the app as another user.
+══════════════════════════════ -->
+<div id="imp-bar" class="imp-bar d-none">
+  <span id="imp-bar-label"></span>
+  <button id="btn-imp-exit" class="imp-bar-exit">✕ Exit</button>
+</div>
+
+<!-- ══════════════════════════════
      SETUP SCREEN
 ══════════════════════════════ -->
 <div id="s-setup" class="screen">
@@ -164,6 +173,7 @@
         <button class="btn btn-g btn-sm" id="btn-adm-refresh">↻</button>
         <button class="btn btn-g btn-sm" id="btn-adm-csv">⬆ CSV</button>
         <button class="btn btn-g btn-sm" id="btn-adm-offday">🏖 Off Day</button>
+        <button class="btn btn-g btn-sm" id="btn-adm-viewas">👁 View as</button>
         <button class="btn btn-g btn-sm" id="btn-adm-settings">⚙ Settings</button>
         <img id="adm-avatar" class="hdr-avatar d-none" src="" alt="">
         <button class="btn btn-g btn-sm" id="btn-signout-adm">Sign out</button>
@@ -901,6 +911,18 @@
     <div class="od-sep"></div>
     <div class="lbl">Recorded off days</div>
     <div id="od-list" style="margin-top:.4rem"></div>
+  </div>
+</div>
+
+<!-- Impersonation user picker -->
+<div class="mov" id="m-impersonate">
+  <div class="modal">
+    <div class="mtitle">👁 View app as…</div>
+    <p class="modal-sub">Select a user to see and use the app exactly as they would. A banner will remind you that impersonation is active.</p>
+    <div id="imp-user-list" class="imp-user-list"></div>
+    <div class="mfoot">
+      <button class="btn btn-s" id="btn-imp-cancel">Cancel</button>
+    </div>
   </div>
 </div>
 
