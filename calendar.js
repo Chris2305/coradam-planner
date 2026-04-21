@@ -28,9 +28,9 @@ const Cal = {
   },
 
   render(){
-    document.getElementById('cal-grid').style.display=this.view==='month'?'':'none';
-    document.getElementById('cal-week').style.display=this.view==='week'?'':'none';
-    document.getElementById('cal-list').style.display=this.view==='list'?'':'none';
+    document.getElementById('cal-grid').style.display=this.view==='month'?'grid':'none';
+    document.getElementById('cal-week').style.display=this.view==='week'?'block':'none';
+    document.getElementById('cal-list').style.display=this.view==='list'?'block':'none';
     if(this.view==='month') this._renderMonth();
     else if(this.view==='week') this._renderWeek();
     else this._renderList();
