@@ -207,7 +207,29 @@ const Slot = {
     const fresh=inp.cloneNode(true);
     inp.parentNode.replaceChild(fresh,inp);
     fresh.addEventListener('change',()=>Drive.uploadFromInput(fresh, eid, mIdx));
-    fresh.click();
+
+    // Helper: open the file picker (called after token is confirmed present)
+    const openPicker=()=>fresh.click();
+
+    // If Drive token is missing, re-authorize NOW while we are still within the
+    // button-click user gesture (required so the browser allows the popup).
+    // After auth succeeds we programmatically open the file picker.
+    if(App._driveToken){
+      openPicker();
+    } else {
+      const statusEl=document.querySelector(`.mfr-doc-status[data-midx="${mIdx}"]`);
+      const btn=document.querySelector(`.mfr-doc-upload-btn[data-midx="${mIdx}"]`);
+      const setStatus=(t,err)=>{ if(statusEl){ statusEl.textContent=t; statusEl.className='mfr-doc-status'+(err?' err':''); } };
+      setStatus('Reconnecting Google Drive…',false);
+      if(btn){ btn.style.pointerEvents='none'; btn.style.opacity='.55'; }
+      Drive.authorize()
+        .then(()=>{ setStatus('',false); openPicker(); })
+        .catch(err=>{
+          if(err.code==='auth/popup-closed-by-user'){ setStatus('',false); return; }
+          setStatus('Drive connection failed: '+U.esc(err.message),true);
+        })
+        .finally(()=>{ if(btn){ btn.style.pointerEvents=''; btn.style.opacity=''; } });
+    }
   },
   _renderMfrDocs(mIdx){
     const list=document.querySelector(`.mfr-docs-list[data-midx="${mIdx}"]`);
