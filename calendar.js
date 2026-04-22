@@ -6,7 +6,13 @@ const Cal = {
   cur: new Date(),
   view: 'month', // 'month' | 'week' | 'list'
 
-  init(){ this.cur=new Date(); this.render(); },
+  init(){
+    this.cur=new Date();
+    this.view='month';
+    // Reset view toggle button states to match
+    ['month','week','list'].forEach(n=>document.getElementById('vt-'+n)?.classList.toggle('on',n==='month'));
+    this.render();
+  },
 
   setView(v){
     this.view=v;
@@ -135,6 +141,13 @@ const Cal = {
   },
 
   _renderWeek(){
+    try{ this._renderWeekInner(); } catch(e){
+      const c=document.getElementById('cal-week');
+      if(c) c.innerHTML='<div style="padding:1rem;color:red;font-size:.8rem">Week render error: '+U.esc(e.message)+'</div>';
+      console.error('[Cal] _renderWeek error:',e);
+    }
+  },
+  _renderWeekInner(){
     const today=U.today();
     const country=App.user?.country||'';
     // Find Monday of current week
@@ -232,6 +245,13 @@ const Cal = {
   },
 
   _renderList(){
+    try{ this._renderListInner(); } catch(e){
+      const c=document.getElementById('cal-list');
+      if(c) c.innerHTML='<div style="padding:1rem;color:red;font-size:.8rem">List render error: '+U.esc(e.message)+'</div>';
+      console.error('[Cal] _renderList error:',e);
+    }
+  },
+  _renderListInner(){
     const uid=App.user.uid;
     const entries=Cache.entriesArr().filter(e=>e.userId===uid).sort((a,b)=>a.date<b.date?-1:1);
     document.getElementById('cal-lbl').textContent='All Bookings';

@@ -140,32 +140,6 @@ function _bindEvents(){
   // Weekday toggle buttons (Mon–Sun)
   document.querySelectorAll('#ms-wd-btns .wd-btn').forEach(b=>b.addEventListener('click',()=>b.classList.toggle('on')));
 
-  // ── Drive upload — pre-flight token check ──
-  // The label click IS a direct user gesture, so we can open the Google auth
-  // popup here without the browser blocking it.  If the Drive token is already
-  // present we let the label's default behaviour (open file picker) proceed.
-  // If not, we block the default, re-auth, then programmatically open the picker.
-  const uploadLbl=document.getElementById('ms-doc-upload-lbl');
-  if(uploadLbl){
-    uploadLbl.addEventListener('click', e=>{
-      if(App._driveToken) return; // token present — file picker opens normally
-      e.preventDefault();
-      const status=document.getElementById('ms-doc-status');
-      status.textContent='Reconnecting Google Drive…'; status.className='doc-status';
-      uploadLbl.style.pointerEvents='none'; uploadLbl.style.opacity='.55';
-      Drive.authorize().then(()=>{
-        status.textContent='';
-        document.getElementById('ms-doc-input').click(); // open file picker now
-      }).catch(err=>{
-        if(err.code==='auth/popup-closed-by-user'){ status.textContent=''; return; }
-        status.textContent='Drive connection failed: '+U.esc(err.message);
-        status.className='doc-status err';
-      }).finally(()=>{
-        uploadLbl.style.pointerEvents=''; uploadLbl.style.opacity='';
-      });
-    });
-  }
-
   // ── Day picker modal ──
   on('btn-day-book', 'click',()=>{ M.close('m-day'); Slot.add(App._pendingDate); });
   on('btn-day-avail','click',()=>{ M.close('m-day'); Avail.openForDate(App._pendingDate); });
